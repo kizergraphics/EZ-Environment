@@ -30,9 +30,9 @@ jobs:
         run: npm ci
       - name: Audit dependencies
         run: npm audit --audit-level=high
-      - name: Run tests
-        run: node --test tests/*.test.js desktop/security.test.cjs
       - name: Build library
         run: npm run build:lib
+      - name: Run tests
+        run: node --test tests/*.test.js desktop/security.test.cjs
       - name: Build app
         run: npm run build:app
