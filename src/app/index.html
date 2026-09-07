@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Local procedural environment authoring: trees, plants, and rocks.">
+  <title>EZ Environment — Local Studio</title>
+  <link rel="icon" type="image/png" href="/favicon-32x32.png">
+  <link rel="stylesheet" href="/styles.css">
+  <link rel="stylesheet" href="/studio.css">
+</head>
+<body>
+  <div id="loading-screen"><img id="logo" src="/images/logo.png" alt="EZ Environment"><div id="loading-text">PREPARING LOCAL WORKSPACE…</div></div>
+  <div id="root">
+    <header id="workspace-bar">
+      <div class="workspace-brand">EZ Environment<small>LOCAL AUTHORING STUDIO</small></div>
+      <nav id="mode-nav" aria-label="Authoring mode"></nav>
+      <div id="workspace-actions">
+        <button id="open-project" class="studio-button">Open project</button>
+        <button id="save-project" class="studio-button">Save project</button>
+      </div>
+    </header>
+    <div id="viewport-toolbar" role="toolbar" aria-label="Viewport controls">
+      <div id="view-style-controls"></div>
+      <div id="view-action-controls">
+        <button id="fit-view" class="studio-button" title="Frame view (F)">Frame · F</button>
+      </div>
+    </div>
+    <div id="app" aria-label="Interactive scene viewport">
+      <div id="paint-indicator" hidden>PAINT MODE · Shift-click to apply</div>
+      <div id="performance-hud" hidden></div>
+    </div>
+    <aside id="inspector-shell" aria-label="Inspector">
+      <div id="inspector-resize" role="separator" tabindex="0" aria-label="Resize inspector" aria-orientation="vertical" aria-valuemin="290" aria-valuemax="480" aria-valuenow="340"></div>
+      <div id="ui-container"></div>
+      <div id="studio-panel" hidden aria-label="Studio controls"></div>
+    </aside>
+    <footer id="status-bar">
+      <div id="studio-status" role="status" aria-live="polite"></div>
+      <div id="camera-navigation" role="group" aria-label="Camera height">
+        <button id="camera-up" class="studio-button" title="Move camera up (Page Up)" aria-keyshortcuts="PageUp">↑</button>
+        <button id="camera-down" class="studio-button" title="Move camera down (Page Down)" aria-keyshortcuts="PageDown">↓</button>
+        <span>Drag to orbit · Right-drag to pan</span>
+      </div>
+    </footer>
+    <div id="aboutOverlay" class="overlay">
+      <div class="about-dialog"><img src="/images/logo.png" alt="EZ Tree">
+        <h1>EZ Environment</h1><h2>Local procedural authoring</h2>
+        <h3>Based on EZ-Tree by Dan Greenheck · MIT License</h3>
+        <p>Plants, rocks, environment composition, and a portable desktop shell.</p>
+        <button id="close-about" class="close-button">CLOSE</button>
+      </div>
+    </div>
+  </div>
+  <a id="downloadLink" hidden></a>
+  <input type="file" id="fileInput" accept=".json" hidden>
+  <script type="module" src="./main.js"></script>
+</body>
+</html>

@@ -1,0 +1,144 @@
+{
+  "generator": "Built-in ImageGen",
+  "note": "Generated albedo sources. Derived maps are artistic approximations, not measured material data.",
+  "assets": [
+    {
+      "id": "leaf-litter",
+      "prompt": "Temperate forest floor of small decomposing brown oak leaves, tiny broken twigs and dark humus. Muted earthy browns, no green grass.",
+      "source": "source.png"
+    },
+    {
+      "id": "moss-soil",
+      "prompt": "Forest floor of dense soft olive green moss patches interspersed with dark moist earth, fine realistic detail.",
+      "source": "source.png"
+    },
+    {
+      "id": "meadow-soil",
+      "prompt": "Dense living grass sod, at least 95 percent vegetation coverage, neutral overhead seamless albedo with fine green blades.",
+      "source": "source.png"
+    },
+    {
+      "id": "dry-earth",
+      "prompt": "Dry compact ochre brown earth with tiny pebbles and subtle irregular cracks, no vegetation.",
+      "source": "source.png"
+    },
+    {
+      "id": "dune-sand",
+      "prompt": "Pale golden desert sand with delicate wind ripple ridges, fine individual sand grains, restrained variation.",
+      "source": "source.png"
+    },
+    {
+      "id": "desert-gravel",
+      "prompt": "Arid desert gravel, many small angular tan and rust pebbles embedded in beige sandy soil.",
+      "source": "source.png"
+    },
+    {
+      "id": "sandstone",
+      "prompt": "Natural warm sandstone stone surface, buff ochre fine grains and irregular subtle horizontal mineral strata.",
+      "source": "source.png"
+    },
+    {
+      "id": "weathered-rock",
+      "prompt": "Cool gray weathered granite surface, mineral grains and hairline fissures with subtle lichen flecks.",
+      "source": "source.png"
+    }
+  ],
+  "validation": [
+    {
+      "id": "leaf-litter",
+      "sourceSize": [
+        1254,
+        1254
+      ],
+      "maps": [
+        1024,
+        2048
+      ],
+      "note": "Normal and roughness inferred from luminance; 2K is resampled where source is smaller."
+    },
+    {
+      "id": "moss-soil",
+      "sourceSize": [
+        1254,
+        1254
+      ],
+      "maps": [
+        1024,
+        2048
+      ],
+      "note": "Normal and roughness inferred from luminance; 2K is resampled where source is smaller."
+    },
+    {
+      "id": "meadow-soil",
+      "sourceSize": [
+        1254,
+        1254
+      ],
+      "maps": [
+        1024,
+        2048
+      ],
+      "note": "Normal and roughness inferred from luminance; 2K is resampled where source is smaller."
+    },
+    {
+      "id": "dry-earth",
+      "sourceSize": [
+        1254,
+        1254
+      ],
+      "maps": [
+        1024,
+        2048
+      ],
+      "note": "Normal and roughness inferred from luminance; 2K is resampled where source is smaller."
+    },
+    {
+      "id": "dune-sand",
+      "sourceSize": [
+        1254,
+        1254
+      ],
+      "maps": [
+        1024,
+        2048
+      ],
+      "note": "Normal and roughness inferred from luminance; 2K is resampled where source is smaller."
+    },
+    {
+      "id": "desert-gravel",
+      "sourceSize": [
+        1254,
+        1254
+      ],
+      "maps": [
+        1024,
+        2048
+      ],
+      "note": "Normal and roughness inferred from luminance; 2K is resampled where source is smaller."
+    },
+    {
+      "id": "sandstone",
+      "sourceSize": [
+        1254,
+        1254
+      ],
+      "maps": [
+        1024,
+        2048
+      ],
+      "note": "Normal and roughness inferred from luminance; 2K is resampled where source is smaller."
+    },
+    {
+      "id": "weathered-rock",
+      "sourceSize": [
+        1254,
+        1254
+      ],
+      "maps": [
+        1024,
+        2048
+      ],
+      "note": "Normal and roughness inferred from luminance; 2K is resampled where source is smaller."
+    }
+  ]
+}

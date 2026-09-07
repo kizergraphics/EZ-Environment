@@ -1,0 +1,25 @@
+{
+  "generator": "Built-in ImageGen",
+  "assets": [
+    {
+      "id": "fern-frond",
+      "prompt": "A single graceful green fern frond, vertical stem and fine paired leaflets, full shape",
+      "source": "fern-frond.png"
+    },
+    {
+      "id": "dry-shrub",
+      "prompt": "A small branching dry desert sage twig with muted dusty olive tiny leaves, upright form",
+      "source": "dry-shrub.png"
+    },
+    {
+      "id": "meadow-foliage",
+      "prompt": "A tuft of eight fine natural green meadow grass blades with two tiny white wildflowers, upright form",
+      "source": "meadow-foliage.png"
+    },
+    {
+      "id": "broadleaf",
+      "prompt": "A dense small branch spray of eight realistic dark olive oak leaves, branching twig",
+      "source": "broadleaf.png"
+    }
+  ]
+}
