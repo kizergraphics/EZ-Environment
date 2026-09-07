@@ -52,7 +52,7 @@
     "@types/three": "^0.169.0",
     "electron": "^44.2.0",
     "electron-builder": "^26.15.3",
-    "prettier": "3.3.3",
+    "prettier": "3.9.6",
     "three": "^0.167.x",
     "vite": "^8.2.2",
     "vite-plugin-dts": "^5.1.0",
