@@ -7,7 +7,7 @@ export function validateTreeProject(input, defaults) {
   function merge(source,target,path='tree'){
     if(!source||typeof source!=='object'||Array.isArray(source))throw new Error(`${path} must be an object.`);
     for(const key of Object.keys(target)){
-      if(key==='map'||key==='maps'||!Object.hasOwn(source,key))continue;
+      if(['map','maps','normalMap','roughnessMap'].includes(key)||!Object.hasOwn(source,key))continue;
       const value=source[key],expected=target[key],name=`${path}.${key}`;
       if(expected&&typeof expected==='object')merge(value,expected,name);
       else{
@@ -18,7 +18,7 @@ export function validateTreeProject(input, defaults) {
     }
   }
   merge(input,result);
-  delete result.bark.maps;delete result.leaves.map;
+  delete result.bark.maps;delete result.leaves.map;delete result.leaves.normalMap;delete result.leaves.roughnessMap;delete result.trellis.maps;
   function range(value,name,min,max,integer=false){if(!Number.isFinite(value)||value<min||value>max||(integer&&!Number.isInteger(value)))throw new Error(`${name} must be between ${min} and ${max}${integer?' (integer)':''}.`);}
   range(result.seed,'Tree seed',0,4294967295,true);
   range(result.branch.levels,'Tree branch levels',0,3,true);

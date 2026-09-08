@@ -92,8 +92,10 @@ test('rendered rolling hills, dunes, and ridges match analytic placement heights
   for(const id of ['forest','desert','rocky']){
     const options=applyBiome(validateOptions({radius:32}),id),geometry=createTerrainGeometry(options);
     const material=new MeshBasicMaterial({side:DoubleSide}),mesh=new Mesh(geometry,material);mesh.updateMatrixWorld(true);
-    const position=geometry.attributes.position,blend=geometry.attributes.biomeBlend;
-    assert.equal(blend.count,position.count);assert.ok(blend.array.every(n=>Number.isFinite(n)&&n>=0&&n<=1));
+    const position=geometry.attributes.position,detailUV=geometry.attributes.uv1;
+    assert.equal(detailUV.count,position.count);assert.ok(detailUV.array.every(Number.isFinite));
+    assert.equal(geometry.userData.terrainTiles.length,4);
+    assert.deepEqual(geometry.groups.map(group=>group.materialIndex),[0,1,2,3,4,4,4,4]);
     for(let i=0;i<position.count;i+=97)assert.ok(Math.abs(position.getY(i)-(terrainHeight(position.getX(i),position.getZ(i),options)-.015))<1e-5);
     const ray=new Raycaster(),heights=[];
     for(const [x,z]of [[-21.3,7.4],[1.37,2.41],[11.11,-9.81],[18.41,17.81],[-4.1,-24.8]]){

@@ -880,14 +880,18 @@ export class Tree extends THREE.Group {
       // the Y axis needs runtime scaling on the texture itself.
       const scale = this.options.bark.textureScale;
       const maps = this.options.bark.maps;
+      const ownedTextures = [];
       const apply = (texture) => {
         if (!texture) return null;
+        texture = texture.clone();
+        ownedTextures.push(texture);
         texture.wrapS = THREE.RepeatWrapping;
         texture.wrapT = THREE.RepeatWrapping;
         texture.repeat.x = 1;
         texture.repeat.y = 1 / scale.y;
         return texture;
       };
+      mat.addEventListener('dispose', () => ownedTextures.forEach(texture => texture.dispose()));
       if (maps.color) mat.map = apply(maps.color);
       if (maps.ao) mat.aoMap = apply(maps.ao);
       if (maps.normal) mat.normalMap = apply(maps.normal);
@@ -925,6 +929,8 @@ export class Tree extends THREE.Group {
     const mat = new THREE.MeshStandardMaterial({
       name: 'leaves',
       map: this.options.leaves.map ?? null,
+      normalMap: this.options.leaves.normalMap ?? null,
+      roughnessMap: this.options.leaves.roughnessMap ?? null,
       color: new THREE.Color(this.options.leaves.tint),
       side: THREE.DoubleSide,
       alphaTest: this.options.leaves.alphaTest,
@@ -932,6 +938,8 @@ export class Tree extends THREE.Group {
       roughness: 1.0,
       dithering: true
     });
+    mat.normalScale.setScalar(.18);
+    if (mat.roughnessMap) mat.metalnessMap = mat.roughnessMap;
 
     // Add custom shader code for branch swaying
     mat.onBeforeCompile = (shader) => {

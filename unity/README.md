@@ -1,5 +1,7 @@
 # Unity import
 
+New packs include standalone reusable textures and a material catalog as well as self-contained GLBs. Import with the updated scripts to create editable, assigned `.mat` files under `UnityMaterials/`, shared across LODs and instances. Native texture copies under `UnityMaterials/Textures/` preserve glTFast's texture formats and settings. Separate PNG/JPEG companions remain available in `textures/` for reuse; changing them does not automatically update the native copies. Older packs still import.
+
 1. Use a Unity project supported by the Unity glTFast package selected in Package Manager. Install **`com.unity.cloud.gltfast`** by package name. The importer uses its native Editor `.glb` asset import, so no compile-time package reference or scripting symbol is needed.
 2. Copy this entire `unity` directory to `Assets/EZEnvironment`. Keep `Editor` and `Runtime` as subdirectories.
 3. Export an asset or environment ZIP from EZ Environment and extract it completely.
@@ -10,7 +12,11 @@ Each chunk contains layer parents and instances with shared meshes/materials, th
 
 Scene packs include the hero tree and the scenic forest as referenced tree assets with explicit LOD files, deduplicated by their saved definitions. Trees outside the terrain radius receive their own placement chunks. Trunk box colliders are optional. Legacy static tree exports remain readable.
 
-Environment and scene packs cap embedded textures at 1024 pixels by default; the export texture-quality control can raise this. Standalone asset exports retain the 4096-pixel default. Self-contained GLBs repeat their required textures in each LOD file, so high-resolution forest exports can be large.
+Asset, environment, scene packs and standalone GLBs cap embedded textures at 2048 pixels by default; the export texture-quality control can raise this where source resolution supports it. Self-contained GLBs repeat their required textures in each LOD file, so high-resolution forest exports can be large.
+
+Generated surfaces carry standard glTF metallic-roughness PBR materials, including embedded base color, normal and roughness textures. Foliage retains its cutout alpha and double-sided material. Photographic biome foliage uses the same selected source and LODs in the viewport and export. Terrain exports its baked blended surface tiles. glTFast imports these surface textures automatically; lighting, sky, fog, exposure, screen-space ambient occlusion, shadows and animated wind must be configured in Unity to match the intended presentation. Natural surface materials use zero metalness.
+
+The included runtime appearance components also correct cutout shadows for glTFast 6.20's Built-in `glTF/PbrMetallicRoughness` shader. Its shadow pass uses Unity's legacy `_MainTex`, `_Color` and `_Cutoff` uniforms, while the visible surface uses glTF property names. Renderer property blocks supply matching texture, tint, cutoff and UV scale/offset; these are reapplied on scene reload for instances and static foliage. Keep both runtime appearance scripts with imported scenes. This compatibility fix is scoped to that Built-in shader and leaves URP/HDRP materials alone. Alpha silhouettes and leaf-shaped shadows were verified with shadows enabled in Unity.
 
 Opaque color and normal textures originally loaded from JPEG files stay JPEG-encoded through export-only copies. Transparent/alpha-tested foliage and newly packed material channels remain PNG. The browser may re-encode the original JPEG; the live scene's textures and materials are not modified. The verified 25-tree-definition fixture was approximately 210 MB at the 1024-pixel cap.
 
@@ -25,6 +31,8 @@ Export snapshots preserve definitions, placements, hierarchy transforms, materia
 The importer validates the manifest, relative paths, file sizes, references, transforms and convex collider face limits before scene reconstruction. Existing imported folders are never overwritten. On cancellation, the partially reconstructed scene root is removed and the copied import folder remains available for retry. Editor asset creation is not part of scene Undo.
 
 Verified locally with **Unity 6000.3.18f1 and Unity glTFast 6.20.0**: clean project compilation; six-species collider fixture; a browser export with 94 placements, eight species, textured tree and loaded flower model; a full-scene export with 119 placements, 25 tree definitions, 53 colliders and 190 shared meshes; exact coordinate conversion; LOD groups; scene save/reopen; and an RTX 3080 rendered preview. Logs and reports are generated under the repository's ignored `unity-validation` directory.
+
+The PBR fixture (`node tests/export-pbr-fixture.mjs`) additionally verifies six assets including a tree, flowering plant, rock and photographic foliage, 11 placements, 35 embedded PBR materials and 12 cutout materials. Its Unity import passed with 11 LOD groups, two colliders and 31 shared meshes; all 35 materials retained imported base color, normal and metallic-roughness texture assets after scene save/reopen. The fixture output is under `artifacts/export-pbr-fixture`, with the Unity report and log under `unity-validation`.
 
 Verification procedure: import a small scene containing an asymmetric boulder on a slope, colored shrubs, pebbles and terrain. Compare positions and LOD counts, inspect collision wireframes, save/reopen the scene, and test in Play mode. Run the same test in a clean Unity project before shipping an environment pack. JavaScript export tests do not establish that a Unity Editor import has passed.
 

@@ -9,6 +9,8 @@ import { LAYERS, QUALITY, validateOptions } from '../environment/options.js';
 import { exportAssetPack, exportScenePack, exportGLB, downloadBlob, exportPNG } from '../export/exporters.js';
 import { cleanTreeDefinition,prepareTreeProject,commitTreeProject } from './tree-project.js';
 import { disposeObject } from '../environment/assets.js';
+import { prepareAssetMaterials } from '../materials/pbr.js';
+import { awaitTextureReadiness } from '../materials/readiness.js';
 import { BIOMES, applyBiome } from '../environment/biomes.js';
 import { terrainHeight } from '../environment/placement.js';
 import { validateCameras, validateCameraState, validateLastAuthoredMode, chooseGroundPosition } from './viewport.js';
@@ -271,10 +273,13 @@ export class Studio {
     for(let i=0;i<3;i++)lods.append(action(i===0?'Full':`LOD ${i}`,()=>{this.lod=i;this.viewportGroup.clear();if(this.asset)this.viewportGroup.add(this.asset.lods[i]);this.updateAssetStats();}));preview.body.append(lods,el('p','asset-stats','Generating…'));
     preview.body.append(action('Frame asset · F',()=>this.fit()));
     const out=section('Save & use');body.append(out.element);
+    this.exportOptions ||= {maxTextureSize:2048,includeInstancedScene:false,includeBakedChunks:false};
+    out.body.append(select('Texture resolution',[['512','512 px · compact'],['1024','1024 px · balanced'],['2048','2048 px · high'],['4096','4096 px · original']],String(this.exportOptions.maxTextureSize),v=>this.exportOptions.maxTextureSize=Number(v)));
     out.body.append(action('Save preset JSON',()=>downloadBlob(new Blob([JSON.stringify({format:'ez-asset',version:1,kind:mode,definition:this.definitions[mode]},null,2)],{type:'application/json'}),`${d.archetype}-preset.json`)));
     out.body.append(action('Load preset JSON',()=>this.openFile('asset')));
-    out.body.append(action('Export GLB',async()=>{await this.ensureAsset();downloadBlob(await exportGLB(this.asset.lods[this.lod]),`${this.asset.definition.archetype}-lod${this.lod}.glb`);}));
-    out.body.append(action('Export asset + LOD pack',async()=>{await this.ensureAsset();this.exportController=new AbortController();try{await exportAssetPack(this.asset,this.asset.definition.archetype,{signal:this.exportController.signal});}finally{this.exportController=null;}}));
+    out.body.append(el('p','','Models include assigned materials. Packs also include reusable textures and material descriptions.'));
+    out.body.append(action('Export GLB',async()=>{await this.ensureAsset();this.exportController=new AbortController();try{downloadBlob(await exportGLB(this.asset.lods[this.lod],{maxTextureSize:this.exportOptions.maxTextureSize,signal:this.exportController.signal}),`${this.asset.definition.archetype}-lod${this.lod}.glb`);}finally{this.exportController=null;}}));
+    out.body.append(action('Export asset + LOD pack',async()=>{await this.ensureAsset();this.exportController=new AbortController();try{await exportAssetPack(this.asset,this.asset.definition.archetype,{maxTextureSize:this.exportOptions.maxTextureSize,signal:this.exportController.signal});}finally{this.exportController=null;}}));
     out.body.append(action('Cancel export',()=>this.exportController?.abort()));
     out.body.append(action('Export preview PNG',()=>this.capturePNG?this.capturePNG('viewport'):(this.render(),exportPNG(this.renderer,`${d.archetype}.png`))));
     out.body.append(action('Add to environment',async()=>{
@@ -356,11 +361,12 @@ export class Studio {
     const output=section('Output',false);body.append(output.element);
     this.renderCameraBookmarks(output.body);
     const pngRow=el('div','studio-button-row');for(const [size,label]of [['viewport','View PNG'],['1080p','1080p PNG'],['4k','4K PNG']])pngRow.append(action(label,()=>this.capturePNG(size)));output.body.append(pngRow);
-    this.exportOptions ||= {maxTextureSize:1024,includeInstancedScene:false,includeBakedChunks:false};
+    this.exportOptions ||= {maxTextureSize:2048,includeInstancedScene:false,includeBakedChunks:false};
     output.body.append(select('Texture resolution',[['512','512 px · compact'],['1024','1024 px · balanced'],['2048','2048 px · high'],['4096','4096 px · original']],String(this.exportOptions.maxTextureSize),v=>this.exportOptions.maxTextureSize=Number(v)));
     output.body.append(field('Include instanced GLB',this.exportOptions.includeInstancedScene,0,0,0,v=>this.exportOptions.includeInstancedScene=v,'checkbox'));
     output.body.append(field('Include baked chunk GLBs',this.exportOptions.includeBakedChunks,0,0,0,v=>this.exportOptions.includeBakedChunks=v,'checkbox'));
     output.body.append(action('Regenerate same seed',()=>this.environment.regenerate()));
+    output.body.append(el('p','','Includes textured models, LODs, reusable texture files and a material catalog for Unity.'));
     output.body.append(action('Export environment pack',async()=>{this.exportController=new AbortController();this.status('Exporting trees, assets, and placement records…');try{await exportScenePack(this.environment,[...(this.tree.visible?[this.tree]:[]),...(this.forest.visible?this.forest.children:[])],{...this.exportOptions,signal:this.exportController.signal,treeColliders:true});this.status('Environment pack exported.');}finally{this.exportController=null;}},'studio-button primary'));
     output.body.append(action('Cancel export',()=>this.exportController?.abort()));
     output.body.append(action('Save project JSON',()=>this.saveProject()));
@@ -433,7 +439,7 @@ export class Studio {
   saveProject(){try{downloadBlob(new Blob([JSON.stringify(this.project(),null,2)],{type:'application/json'}),'ez-environment-project.json');this.persist();this.status('Project saved.');}catch(e){this.status(e.message,true);}}
   onTreeChanged(){
     if(this._disposed)return;this.lastAuthoredMode='tree';this.syncPreview();this.refreshTreeSources?.();this.persist();clearTimeout(this.treeChangeTimer);
-    this.treeChangeTimer=setTimeout(()=>this.environment.regenerate().then(()=>this.persist()).catch(e=>this.status(e.message,true)),180);
+    this.treeChangeTimer=setTimeout(()=>awaitTextureReadiness(this.tree).then(()=>this.environment.regenerate()).then(()=>this.persist()).catch(e=>this.status(e.message,true)),180);
   }
   async openFile(kind){
     const input=document.createElement('input');input.type='file';input.accept='.json,application/json';
@@ -462,6 +468,8 @@ export class Studio {
       for(const c of options.customSpecies){if(registry.has(c.id))throw new Error('Custom species cannot replace a built-in species.');const a=makeSpecies(c.definition.archetype,c.definition);registry.set(c.id,a);created.push(a);}
       for(const l of Object.values(options.layers))for(const id of [l.species,...l.speciesChoices.map(c=>c.id)])if(!registry.has(id))throw new Error(`Unknown species: ${id}`);
       // Finish every asynchronous preparation before committing the live tree.
+      for (const asset of created) await prepareAssetMaterials(asset);
+      if (preparedTree) await awaitTextureReadiness(preparedTree);
       if(options.composition==='legacy')await this.ensureLegacyForest?.();
       if(data.version===2){
         const authored=preparedTree||this.tree;

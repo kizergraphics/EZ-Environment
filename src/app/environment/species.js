@@ -23,9 +23,10 @@ export function createGrass(variant = 'medium') {
     const geometry = mergeGeometries(geometries); geometries.forEach(g => g.dispose());
     const group = new THREE.Group(); group.name = `lod${lod}`;
     group.add(new THREE.Mesh(geometry,new THREE.MeshStandardMaterial({color:0x547d31,roughness:1,side:THREE.DoubleSide})));
+    group.children[0].material.userData = { pbrFamily:'foliage', pbrTextureScale:1, vegetation:true };
     return group;
   });
-  return { object3D:lods[0],lods,definition:{version:1,archetype:'grass',variant},definitionHash:`grass-${variant}-v1`,dispose(){lods.forEach(g=>disposeObject(g));} };
+  return { object3D:lods[0],lods,definition:{version:1,archetype:'grass',variant,leafMaterial:'foliage',textureScale:1},definitionHash:`grass-${variant}-v1`,dispose(){lods.forEach(g=>disposeObject(g));} };
 }
 export function collectMeshes(root) {
   root.updateMatrixWorld(true); const parts = [];
@@ -45,13 +46,13 @@ export function makeSpecies(kind, definition) {
   if (ROCK_ARCHETYPES.includes(kind)) return generateRock(definition || createRockDefinition(kind));
   return compactPlant(generatePlant(definition || createPlantDefinition(kind)));
 }
-// Mapless foliage uses identical PBR responses. Bake each material's linear color
+// Only untagged legacy mapless foliage can share a baked material. PBR slots must remain distinct. Bake each material's linear color
 // into vertices, preserving every triangle while allowing one draw per instance batch.
 export function compactPlant(asset) {
   const lods=[];
   for(const source of asset.lods){
     const parts=collectMeshes(source);
-    if(parts.some(p=>Array.isArray(p.material)||p.material.map)){lods.forEach(l=>disposeObject(l));return asset;}
+    if(parts.some(p=>Array.isArray(p.material)||p.material.map||p.material.userData.pbrFamily)){lods.forEach(l=>disposeObject(l));return asset;}
     const geometries=parts.map(({geometry,material,matrix})=>{
       const g=geometry.clone().applyMatrix4(matrix),count=g.attributes.position.count,old=g.attributes.color,colors=[];
       for(let i=0;i<count;i++)colors.push((old&&material.vertexColors?old.getX(i):1)*material.color.r,(old&&material.vertexColors?old.getY(i):1)*material.color.g,(old&&material.vertexColors?old.getZ(i):1)*material.color.b);
@@ -89,7 +90,7 @@ export async function createRegistry(custom, cache, useModels = true) {
         const g = source.clone(true); g.name = `lod${i}`;
         const box = new THREE.Box3().setFromObject(g), height = Math.max(0.01,box.max.y-box.min.y);
         g.scale.setScalar(0.7 / height); g.position.y = -box.min.y*g.scale.x;
-        g.traverse(o => { if(o.isMesh) { o.material = o.material.clone(); o.material.roughness = 1; o.material.metalness = 0; o.material.transparent = false; o.material.alphaTest = 0.5; } });
+        g.traverse(o => { if(o.isMesh) { o.material = o.material.clone(); o.material.roughness = 1; o.material.metalness = 0; o.material.transparent = false; o.material.alphaTest = 0.5; o.material.userData = { ...o.material.userData, pbrFamily:'petal', pbrPreserveColorMap:true }; } });
         return g;
       });
       registry.set(`flower_${name}`,{object3D:lods[0],lods,definition:{source:`flower_${name}`},definitionHash:`flower-${name}`,dispose(){lods.forEach(g=>g.traverse(o=>{if(o.material)o.material.dispose();}));}});

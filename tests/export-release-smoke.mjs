@@ -110,7 +110,7 @@ try {
       ...new Set([
         ...grassMaterials,
         app.tree.branchesMesh.material,
-        environment.ground.material,
+        ...(Array.isArray(environment.ground.material) ? environment.ground.material : [environment.ground.material]),
       ]),
     ].map((material) => ({
       material,
@@ -122,7 +122,7 @@ try {
       grassRoughness: grassMaterials[0].roughness,
       heroSeed: app.tree.options.seed,
       heroColor: app.tree.branchesMesh.material.color.toArray(),
-      terrainColor: environment.ground.material.color.toArray(),
+      terrainColor: (Array.isArray(environment.ground.material) ? environment.ground.material[0] : environment.ground.material).color.toArray(),
     };
     window.__EXPORT_RELEASE_SMOKE__ = { mutated: false, savedMaterials };
     app.studio.exportOptions = {

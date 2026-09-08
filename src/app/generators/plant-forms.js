@@ -7,7 +7,7 @@ export const EXTRA_PLANT_DEFAULTS = {
   cactus: { height: 2.6, width: 1.25, stemCount: 3, branches: 3, leafColor: '#6d7950', stemColor: '#6d7950', armCount: 2 },
   succulent: { height: .75, width: 1.4, stemCount: 12, branches: 3, leafSize: .4, leafColor: '#77938b' },
   cushion: { height: .16, width: 1, stemCount: 12, branches: 5, leafSize: .045, density: .9, leafColor: '#64743d' },
-  deadwood: { height: .65, width: 3.2, stemCount: 1, branches: 3, stemColor: '#67503a', leafColor: '#67503a' },
+  deadwood: { height: .65, width: 3.2, stemCount: 1, branches: 3, stemColor: '#a58c70', leafColor: '#67503a' },
 };
 
 // Normalized botanical skeletons use the same meshing, wind and export path as

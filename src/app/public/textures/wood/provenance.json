@@ -1,0 +1,11 @@
+{
+  "weathered-grain-v1.png": {
+    "source": "Built-in ImageGen, generated for EZ Environment on 2026-09-07",
+    "description": "Continuous weathered hardwood albedo with longitudinal fibers, pores, narrow splits and small knots. Flat diffuse illumination, no board boundaries.",
+    "processing": "Tint-compatible color with derived artistic normal and roughness maps. Not measured scan data."
+  },
+  "endgrain": {
+    "source": "Original analytic code in wood-surface.js, project MIT license",
+    "description": "Irregular growth rings, radial checks and pores mapped onto circular cut ends."
+  }
+}

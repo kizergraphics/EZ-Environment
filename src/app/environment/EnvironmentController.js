@@ -7,10 +7,12 @@ import { EnvironmentAssetCache } from './assets.js';
 import { WindController } from './wind.js';
 import { LodController, lodVisibilityMask } from './lod.js';
 import { createTerrainGeometry } from './terrain.js';
-import { BiomeMaterials } from './materials.js';
+import { BiomeMaterials, disposeTerrainGround } from './materials.js';
 import { BiomeGrove } from './grove.js';
 import { biomeTreeRecords,withBiomeSources } from './biome-placement.js';
-import { addFoliageVariants } from './biome-species.js';
+import { addFoliageVariants, selectAssetAppearance } from './biome-species.js';
+import { prepareAssetMaterials } from '../materials/pbr.js';
+import { awaitTextureReadiness } from '../materials/readiness.js';
 import { hash } from './random.js';
 import { ROCK_PRESETS } from '../generators/rocks.js';
 
@@ -43,6 +45,8 @@ export class EnvironmentController extends THREE.Group {
     this._initializing = (async()=>{
       if(!this.registry.size){
         const registry=await createRegistry(this.options.customSpecies,this.cache);
+        try { for (const asset of registry.values()) await prepareAssetMaterials(asset); }
+        catch (error) { for (const asset of registry.values()) asset.dispose(); throw error; }
         if(this._disposed){for(const asset of registry.values())asset.dispose();throw new Error('Environment initialization was canceled after disposal.');}
         this.registry=registry;
         this.foliageTextures=await addFoliageVariants(registry);
@@ -99,7 +103,9 @@ export class EnvironmentController extends THREE.Group {
           if(id!==this._generation){for(const b of replacements.values())this.releaseBatch(b);return;}
         }
         if(!dirty){nextGround=this.createGround(options,groundMaps);nextGrove=this.grove.build(records,options);}
-      } catch(e){for(const b of replacements.values())this.releaseBatch(b);nextGround?.geometry.dispose();nextGround?.material.dispose();if(nextGrove)this.grove.release(nextGrove.root);throw e;}
+        if(nextGrove) await awaitTextureReadiness(nextGrove.exportRoot);
+        if(id!==this._generation||this._disposed){for(const b of replacements.values())this.releaseBatch(b);disposeTerrainGround(nextGround);if(nextGrove){this.grove.release(nextGrove.root);this.grove.release(nextGrove.exportRoot);}return;}
+      } catch(e){for(const b of replacements.values())this.releaseBatch(b);disposeTerrainGround(nextGround);if(nextGrove)this.grove.release(nextGrove.root);throw e;}
       for(const [key,b]of this.batches)if(!result.chunks.has(key)||replacements.has(key)){this.releaseBatch(b);this.batches.delete(key);}
       for(const [key,b]of replacements){this.batches.set(key,b);this.content.add(b.root);}
       this.placement = result;
@@ -131,7 +137,8 @@ export class EnvironmentController extends THREE.Group {
         for(const [id,speciesRecords] of bySpecies){
         const asset=this.registry.get(id);
         if(!asset)throw new Error(`Unknown species: ${id}`);
-        const source=(options.appearance==='photorealistic'&&options.composition==='biome'?asset.photoLods?.[level]:null)||asset.lods[level]||asset.object3D, parts=collectMeshes(source);
+        const selectedAsset=selectAssetAppearance(asset,options);
+        const source=selectedAsset.lods[level]||selectedAsset.object3D, parts=collectMeshes(source);
         const isPlant=['grass','flowers','plants'].includes(layer)&&source.userData.wind!==false;
         for(const part of parts){
           const castShadow=q.shadows&&layer!=='grass'&&layer!=='flowers'&&layer!=='pebbles'&&(level===0||options.composition==='biome'&&(layer==='boulders'||layer==='rocks'&&level===1));
@@ -164,19 +171,21 @@ export class EnvironmentController extends THREE.Group {
   releaseBatch(b){b.root.removeFromParent();b.root.traverse(o=>{if(o.isInstancedMesh)o.dispose();});}
   createGround(options=this.options,maps=null){
     const g=createTerrainGeometry(options);
-    const ground=new THREE.Mesh(g,this.biomeMaterials.ground(options,maps));ground.name='Terrain';ground.receiveShadow=true;return ground;
+    try { const ground=new THREE.Mesh(g,this.biomeMaterials.ground(options,maps,g));ground.name='Terrain';ground.receiveShadow=true;return ground; }
+    catch (error) { g.dispose(); throw error; }
   }
   applyStoneMaterials(maps,options){
+    if (!maps?.stone) return;
     for(const id of ['rock','boulder','pebble','sandstone','sandstone_outcrop','desert_pebble','rock_outcrop',...ROCK_PRESETS.map(p=>p.id)]){
       const asset=this.registry.get(id);if(!asset)continue;
       for(const lod of asset.lods)for(const {material} of collectMeshes(lod)){
         const all=[material,...[...(this.lod.sources.get(material)?.levels.values()||[])].map(b=>b.material)];
-        for(const m of all){m.map=maps?.stone?.color??null;m.normalMap=maps?.stone?.normal??null;m.roughnessMap=maps?.stone?.roughness??null;m.normalScale.setScalar(options.appearance==='photorealistic'?.8:.3);m.needsUpdate=true;}
+        for(const m of all){if(m.userData.pbrFamily)continue;m.map=maps.stone.color;m.normalMap=maps.stone.normal;m.roughnessMap=maps.stone.roughness;m.normalScale.setScalar(options.appearance==='photorealistic'?.8:.3);m.needsUpdate=true;}
       }
     }
   }
   makeGround(ground=this.createGround()){
-    if(this.ground){this.ground.removeFromParent();this.ground.geometry.dispose();this.ground.material.dispose();}
+    if(this.ground){this.ground.removeFromParent();disposeTerrainGround(this.ground);}
     this.ground=ground;this.add(ground);
     try{this.onTerrainChanged?.(this.options);}catch(error){this.report(new Error(`Terrain changed, but its observer failed: ${error.message}`));}
   }
@@ -186,14 +195,16 @@ export class EnvironmentController extends THREE.Group {
       const asset=this.registry.get(id);if(!asset)continue;
       const palette=asset.definition.archetype==='grass'&&asset.definition.height!==undefined?new THREE.Color(asset.definition.leafColor):null;
       for(const lod of asset.lods)for(const part of collectMeshes(lod)){
+        if (part.material.userData.pbrFamily && part.material.userData.pbrFamily !== 'foliage') continue;
         part.material.color.copy(color);
-        if(palette)part.material.color.setRGB(color.r/Math.max(.001,palette.r),color.g/Math.max(.001,palette.g),color.b/Math.max(.001,palette.b));
+        if(palette&&!part.material.userData.pbrFamily)part.material.color.setRGB(color.r/Math.max(.001,palette.r),color.g/Math.max(.001,palette.g),color.b/Math.max(.001,palette.b));
         const entry=this.lod.sources.get(part.material);if(entry)for(const binding of entry.levels.values())binding.material.color.copy(part.material.color);
       }
     }
   }
   async addSpecies(id,asset,layer){
     if(this.registry.has(id))throw new Error('Species already exists.');
+    try { await prepareAssetMaterials(asset); } catch (error) { asset.dispose(); throw error; }
     this.registry.set(id,asset);
     try{await this.setOptions({customSpecies:[...this.options.customSpecies,{id,definition:structuredClone(asset.definition)}],layers:{[layer]:{...this.options.layers[layer],species:id,speciesChoices:[]}}});}
     catch(error){this.registry.delete(id);asset.dispose();throw error;}
@@ -224,7 +235,7 @@ export class EnvironmentController extends THREE.Group {
     if(this._disposed)return;this._disposed=true;this._generation++;this._cancelBuild?.();clearTimeout(this._grassTimer);
     for(const b of this.batches.values())this.releaseBatch(b);this.batches.clear();
     for(const a of this.registry.values())a.dispose();this.registry.clear();this.cache.dispose();this.lod.dispose();this.wind.dispose();
-    this.ground?.geometry.dispose();this.ground?.material.dispose();this.skybox.geometry.dispose();this.skybox.material.dispose();this.skybox.sun.shadow.map?.dispose();
+    disposeTerrainGround(this.ground);this.skybox.geometry.dispose();this.skybox.material.dispose();this.skybox.sun.shadow.map?.dispose();
     this.grove.dispose();this.biomeMaterials.dispose();this.foliageTextures?.dispose();
     this.removeFromParent();this.clear();this.ready=false;
   }

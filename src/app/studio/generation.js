@@ -1,11 +1,14 @@
 import { ObjectLoader } from 'three';
 import { disposeObject } from '../environment/assets.js';
+import { prepareAssetMaterials } from '../materials/pbr.js';
 export class GenerationClient {
-  constructor() { this.id = 0; this.worker = null; this.pending = null; }
+  constructor(prepareMaterials = prepareAssetMaterials) { this.id = 0; this.worker = null; this.pending = null; this.prepareMaterials = prepareMaterials; this.materialController = null; }
 
   generate(mode, definition, quality = 'export') {
     this.cancel();
     const id = ++this.id;
+    const materialController = new AbortController();
+    this.materialController = materialController;
     return new Promise((resolve, reject) => {
       this.pending = resolve;
       let worker = null;
@@ -14,12 +17,13 @@ export class GenerationClient {
         // Clear ownership before termination: even a queued old event cannot
         // clear a newer job, or leave its promise without a cancellation path.
         this.worker = null; this.pending = null;
+        this.materialController = null;
         if (worker) { worker.onmessage = null; worker.onerror = null; worker.terminate(); }
       };
       try {
         worker = new Worker(new URL('./generator.worker.js', import.meta.url), { type: 'module' });
         this.worker = worker;
-        worker.onmessage = ({ data }) => {
+        worker.onmessage = async ({ data }) => {
           if (!current() || data?.id !== id) return;
           const lods = [];
           try {
@@ -30,12 +34,14 @@ export class GenerationClient {
             let disposed = false;
             const asset = { ...data, lods, object3D: lods[0], dispose() {
               if (disposed) return;
-              disposed = true; lods.forEach(l => disposeObject(l, true));
+              disposed = true; lods.forEach(l => disposeObject(l));
             } };
+            await this.prepareMaterials(asset, { signal: materialController.signal });
+            if (!current()) { asset.dispose(); return; }
             finish(); resolve(asset);
           } catch (error) {
-            lods.forEach(l => disposeObject(l, true));
-            finish(); reject(error);
+            lods.forEach(l => disposeObject(l));
+            if (current()) { finish(); reject(error); }
           }
         };
         worker.onerror = e => {
@@ -53,6 +59,7 @@ export class GenerationClient {
 
   cancel() {
     const worker = this.worker, pending = this.pending;
+    this.materialController?.abort(); this.materialController = null;
     this.worker = null; this.pending = null;
     if (worker) { worker.onmessage = null; worker.onerror = null; worker.terminate(); }
     pending?.(null);

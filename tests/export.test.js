@@ -9,9 +9,9 @@ import {
 } from 'three/addons/libs/fflate.module.js';
 import {
   createRockDefinition,
-  generateRock,
+  generateRock as generateTexturedRock,
 } from '../src/app/generators/rocks.js';
-import { extraSpecies } from '../src/app/environment/biome-species.js';
+import { extraSpecies as texturedExtraSpecies } from '../src/app/environment/biome-species.js';
 import {
   createEnvironmentManifest,
   exportGLB,
@@ -20,6 +20,17 @@ import {
   placementTransform,
   validateManifest,
 } from '../src/app/export/exporters.js';
+
+// These DOM-free tests exercise geometry, manifests and transforms. Actual
+// generated PBR map embedding is covered by export-pbr-fixture.mjs in a browser.
+function geometryOnly(asset) {
+  for (const root of asset.lods) root.traverse(node => {
+    if (node.material) delete node.material.userData.pbrFamily;
+  });
+  return asset;
+}
+const generateRock = definition => geometryOnly(generateTexturedRock(definition));
+const extraSpecies = kind => geometryOnly(texturedExtraSpecies(kind));
 
 // GLTFExporter uses the browser FileReader API even for texture-free geometry.
 // Node's Blob implementation supplies the same byte source for these tests.
@@ -103,7 +114,8 @@ test('biome appearance metadata is detached and discloses viewport effects omitt
   const manifest=createEnvironmentManifest(environment);
   assert.equal(manifest.presentation.appearance,'photorealistic');
   assert.equal(manifest.presentation.biome,'desert');
-  assert.match(manifest.presentation.limitations.join(' '),/terrain material blending/);
+  assert.doesNotMatch(manifest.presentation.limitations.join(' '),/terrain material blending|procedural source-asset LODs/);
+  assert.match(manifest.presentation.materialFallback,/embedded base color, normal, and roughness/);
   assert.match(manifest.presentation.limitations.join(' '),/ambient occlusion/);
   environment.options.lighting.exposure=2;
   assert.equal(manifest.presentation.lighting.exposure,1.05);

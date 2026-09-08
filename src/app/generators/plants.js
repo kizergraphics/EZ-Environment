@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { EXTRA_PLANT_FORMS, EXTRA_PLANT_DEFAULTS, buildPlantForm } from './plant-forms.js';
 
-/** Original, texture-free botanical meshes. No DOM, renderer, or source assets required. */
+/** Original botanical meshes with serializable PBR material descriptors. No DOM, renderer, or source assets required. */
 export const PLANT_ARCHETYPES = Object.freeze(['shrub', 'bush', 'sapling', 'fern', 'weed', 'groundCover', 'flower', ...EXTRA_PLANT_FORMS]);
 const TAU = Math.PI * 2;
 const GOLDEN_ANGLE = 2.399963229728653;
@@ -58,7 +58,11 @@ export function createPlantDefinition(archetype = 'shrub', overrides = {}) {
     stemColor: color(d.stemColor, 'stemColor'), leafColor: color(d.leafColor, 'leafColor'), flowerColor: color(d.flowerColor, 'flowerColor'),
     flowerCount: numeric(d.flowerCount, 'flowerCount', 1, 16, true), petalCount: numeric(d.petalCount, 'petalCount', 4, 16, true),
     flowering: Boolean(d.flowering),
+    stemMaterial: d.stemMaterial ?? (['shrub','bush','sapling','deadwood','coniferSapling'].includes(archetype) ? 'bark' : 'stem'),
+    leafMaterial: d.leafMaterial ?? 'foliage', petalMaterial: d.petalMaterial ?? 'petal',
+    textureScale: numeric(d.textureScale ?? 1, 'textureScale', .05, 20),
   };
+  for (const key of ['stemMaterial','leafMaterial','petalMaterial']) if (!['bark','stem','foliage','petal','pollen'].includes(result[key])) throw new TypeError(`Unknown plant ${key}.`);
   if(archetype==='grass') {
     if(typeof d.seedHeads!=='boolean')throw new TypeError('Plant seedHeads must be boolean.');
     result.seedHeads=d.seedHeads;result.bladeWidth=numeric(d.bladeWidth,'bladeWidth',.005,.12);
@@ -292,7 +296,7 @@ class GeometryBatch {
   }
 }
 
-function meshStem(batch, stem, level, preview = false) {
+function meshStem(batch, stem, level, preview = false, endBatch = null) {
   const sections = stem.rounded?(preview?[16,10,6]:[24,14,8])[level]:Math.max(2, Math.round((stem.points.length - 1) / (preview ? [1.5, 2.5, 4] : [1, 1.8, 3])[level]));
   const sides = (stem.rounded?(preview?[12,8,4]:[16,10,6]):preview ? [6, 4, 3] : [7, 5, 3])[level];
   const base = batch.positions.length / 3;
@@ -305,7 +309,7 @@ function meshStem(batch, stem, level, preview = false) {
     const binormal = V().crossVectors(tangent, normal).normalize();
     const cap=stem.rounded?Math.sqrt(Math.max(.002,1-Math.max(0,(t-.83)/.17)**2)):1;
     const radius = stem.radius * (1 - (stem.taper??.83) * t)*cap;
-    for (let s = 0; s < sides; s++) {
+    for (let s = 0; s <= sides; s++) {
       const a = s / sides * TAU;
       const rib=stem.rounded?(s%2?.96:1.04):1;
       const p = paths[i].clone().addScaledVector(normal, Math.cos(a) * radius*rib).addScaledVector(binormal, Math.sin(a) * radius*rib);
@@ -313,13 +317,30 @@ function meshStem(batch, stem, level, preview = false) {
     }
   }
   for (let i = 0; i < sections; i++) for (let s = 0; s < sides; s++) {
-    const a = base + i * sides + s, b = base + i * sides + (s + 1) % sides;
-    batch.triangle(a, b, a + sides); batch.triangle(b, b + sides, a + sides);
+    const a = base + i * (sides + 1) + s, b = a + 1;
+    batch.triangle(a, b, a + sides + 1); batch.triangle(b, b + sides + 1, a + sides + 1);
+  }
+  if (endBatch) {
+    // Independent planar UVs and vertices keep the cut grain circular and the rim sharp.
+    for (const end of [0, sections]) {
+      const center = endBatch.vertex(paths[end], .5, .5, 0);
+      const ring = [];
+      for (let s = 0; s < sides; s++) {
+        const offset = (base + end * (sides + 1) + s) * 3;
+        ring.push(endBatch.vertex(V(...batch.positions.slice(offset, offset + 3)),
+          .5 + Math.cos(s / sides * TAU) * .48, .5 + Math.sin(s / sides * TAU) * .48, 0));
+      }
+      for (let s = 0; s < sides; s++) {
+        if (end === 0) endBatch.triangle(center, ring[(s + 1) % sides], ring[s]);
+        else endBatch.triangle(center, ring[s], ring[(s + 1) % sides]);
+      }
+    }
+    return;
   }
   const bottom = batch.vertex(paths[0], .5, 0, 0), top = batch.vertex(paths[sections], .5, 1, paths[sections].y * .55);
   for (let s = 0; s < sides; s++) {
     batch.triangle(bottom, base + (s + 1) % sides, base + s);
-    batch.triangle(top, base + sections * sides + s, base + sections * sides + (s + 1) % sides);
+    batch.triangle(top, base + sections * (sides + 1) + s, base + sections * (sides + 1) + s + 1);
   }
 }
 
@@ -374,12 +395,15 @@ export function generatePlant(definition = createPlantDefinition(), { quality = 
     centers: new THREE.MeshStandardMaterial({ name: 'Flower centers', color: '#b89438', roughness: .94, vertexColors: true }),
   };
   const wind=!['deadwood','cactus','succulent'].includes(d.archetype);
-  for (const [key, material] of Object.entries(materials)) material.userData = { vegetation: true, wind, windStrength: key === 'stems' ? .025 : .055, windAttribute: 'windWeight' };
+  const deadwood = d.archetype === 'deadwood';
+  if (deadwood) materials.ends = new THREE.MeshStandardMaterial({ name: 'Wood cut ends', color: '#d5b991', roughness: .9, vertexColors: true });
+  for (const [key, material] of Object.entries(materials)) material.userData = { pbrFamily: { stems:deadwood?'wood':d.stemMaterial, ends:'endgrain', leaves:d.leafMaterial, petals:d.petalMaterial, centers:'pollen' }[key], pbrTextureScale:key==='ends'?1:d.textureScale, vegetation: true, wind, windStrength: key === 'stems' ? .025 : .055, windAttribute: 'windWeight' };
   const lods = [0, 1, 2].map(level => {
     const group = new THREE.Group(); group.name = `lod${level}`;
     group.userData = { assetType: 'plant', archetype: d.archetype, definitionHash, lod: level, definition: structuredClone(d), wind };
     const batches = { stems: new GeometryBatch(), leaves: new GeometryBatch(), petals: new GeometryBatch(), centers: new GeometryBatch() };
-    for (const stem of model.stems) if (level < 2 || stem.rank < 2) meshStem(batches.stems, stem, level, preview);
+    if (deadwood) batches.ends = new GeometryBatch();
+    for (const stem of model.stems) if (level < 2 || stem.rank < 2) meshStem(batches.stems, stem, level, preview, batches.ends);
     const stride = (preview ? [2, 4, 8] : [1, 2, 4])[level];
     const bladeLevel = Math.min(2, level + (preview ? 1 : 0));
     model.leaves.forEach((leaf, i) => { if (i % stride === 0) meshBlade(batches.leaves, leaf, bladeLevel, [1, 1.16, 1.3][level]); });

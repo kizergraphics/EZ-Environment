@@ -5,7 +5,7 @@ import { validateTreeProject } from './project-validation.js';
 
 export function cleanTreeDefinition(tree) {
   const o=tree.options;
-  return JSON.parse(JSON.stringify({...o,bark:{...o.bark,maps:undefined},leaves:{...o.leaves,map:undefined}}));
+  return JSON.parse(JSON.stringify({...o,bark:{...o.bark,maps:undefined},leaves:{...o.leaves,map:undefined,normalMap:undefined,roughnessMap:undefined},trellis:{...o.trellis,maps:undefined,endMaps:undefined}}));
 }
 
 export function prepareTreeProject(input,currentTree) {

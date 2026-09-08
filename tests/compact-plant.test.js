@@ -3,8 +3,9 @@ import assert from 'node:assert/strict';
 import { Box3,Vector3 } from 'three';
 import { generatePlant,createPlantDefinition } from '../src/app/generators/plants.js';
 import { compactPlant } from '../src/app/environment/species.js';
-test('environment compaction preserves triangles, world bounds and material colors with one draw per LOD',()=>{
+test('legacy untagged compaction preserves triangles, world bounds and material colors with one draw per LOD',()=>{
   const a=generatePlant(createPlantDefinition('flower'));
+  a.lods.forEach(l=>l.traverse(o=>{if(o.material)delete o.material.userData.pbrFamily;}));
   const count=l=>{let sum=0;l.traverse(o=>{if(o.geometry)sum+=o.geometry.index.count;});return sum;};
   const before=a.lods.map(count),bounds=a.lods.map(l=>new Box3().setFromObject(l));
   const expected=[];
@@ -15,4 +16,10 @@ test('environment compaction preserves triangles, world bounds and material colo
   let offset=0;const colors=b.object3D.children[0].geometry.attributes.color;
   for(const[r,g,bl,n]of expected){assert.ok(new Vector3().fromBufferAttribute(colors,offset).distanceTo(new Vector3(r,g,bl))<1e-6);offset+=n;}
   b.dispose();b.dispose();
+});
+
+test('generated PBR plants retain distinct surface slots during compaction',()=>{
+  const a=generatePlant(createPlantDefinition('flower'));const b=compactPlant(a);
+  assert.equal(a,b);assert.deepEqual(b.object3D.children.map(o=>o.material.userData.pbrFamily),['stem','foliage','petal','pollen']);
+  b.dispose();
 });

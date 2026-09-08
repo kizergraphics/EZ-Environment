@@ -1,5 +1,8 @@
 import * as THREE from 'three';
 import { TreePreset } from 'ez-environment';
+import { getBotanicalMaps } from './materials/pbr.js';
+import { registerTextureReadiness } from './materials/readiness.js';
+import { getWoodMaps } from './materials/wood-surface.js';
 
 // Bark keys map 1:1 to ambientcg directories under /textures/bark/.
 // Add or remove entries to expose more variants in the UI dropdown.
@@ -28,19 +31,28 @@ const textureLoader = new THREE.TextureLoader();
 const barkCache = new Map();
 const leafCache = new Map();
 
-// The onError callbacks below matter: a texture whose file is missing keeps
-// an undefined image forever (the dev server masks the 404 by serving
-// index.html). That renders harmlessly but breaks GLTF export, so a failed
-// load must remove the map from the cache entirely.
+// Keep failed textures attached so export can report the loading error. Evict
+// their cache entries so regeneration can retry the source files.
+
+function loadTexture(url, onError) {
+  let resolve, reject;
+  const ready = new Promise((yes, no) => { resolve = yes; reject = no; });
+  const texture = textureLoader.load(url, resolve, undefined, error => {
+    onError?.(error);
+    reject(new Error(`Could not load required texture ${url}. Retry generation.`));
+  });
+  registerTextureReadiness(texture, ready);
+  return texture;
+}
 
 function loadColor(url, onError) {
-  const t = textureLoader.load(url, undefined, undefined, onError);
+  const t = loadTexture(url, onError);
   t.colorSpace = THREE.SRGBColorSpace;
   return t;
 }
 
 function loadLinear(url, onError) {
-  return textureLoader.load(url, undefined, undefined, onError);
+  return loadTexture(url, onError);
 }
 
 /**
@@ -56,8 +68,8 @@ export function getBarkMaps(type) {
   const base = `/textures/bark/${dir}/${dir}`;
   const maps = {};
   const drop = (key) => () => {
-    console.warn(`Missing bark texture: ${base}_… (${key}); skipping this map.`);
-    maps[key] = null;
+    console.warn(`Missing bark texture: ${base}_… (${key}).`);
+    barkCache.delete(type);
   };
   maps.color = loadColor(`${base}_Color.jpg`, drop('color'));
   maps.normal = loadLinear(`${base}_NormalGL.jpg`, drop('normal'));
@@ -74,8 +86,8 @@ export function getBarkMaps(type) {
 export function getLeafMap(type) {
   if (leafCache.has(type)) return leafCache.get(type);
   const texture = loadColor(`/textures/leaves/${type}.png`, () => {
-    console.warn(`Missing leaf texture: /textures/leaves/${type}.png; skipping.`);
-    leafCache.set(type, null);
+    console.warn(`Missing leaf texture: /textures/leaves/${type}.png.`);
+    leafCache.delete(type);
   });
   texture.premultiplyAlpha = true;
   leafCache.set(type, texture);
@@ -96,6 +108,11 @@ export function applyTreeTextures(tree) {
     tree.options.bark.maps.roughness = barkMaps.roughness;
   }
   tree.options.leaves.map = getLeafMap(tree.options.leaves.type);
+  const foliage = getBotanicalMaps('foliage');
+  tree.options.leaves.normalMap = foliage.normalMap;
+  tree.options.leaves.roughnessMap = foliage.roughnessMap;
+  tree.options.trellis.maps = getWoodMaps('wood');
+  tree.options.trellis.endMaps = getWoodMaps('endgrain');
 }
 
 /**

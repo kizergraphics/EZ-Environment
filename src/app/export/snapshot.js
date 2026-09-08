@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { registerTextureReadiness, textureReadiness } from '../materials/readiness.js';
 
 /** A pack owns its appearance and hierarchy, but never the source geometry. */
 export function createExportSnapshot() {
@@ -25,6 +26,11 @@ export function createExportSnapshot() {
         : image,
     );
     texture.userData = { ...texture.userData };
+    const ready = textureReadiness(source);
+    if (ready) registerTextureReadiness(texture, ready.then(() => {
+      // Loader completion may replace an initially undefined image.
+      if (!image) texture.image = source.image;
+    }));
     if (mimeType) texture.userData.mimeType = mimeType;
     else if (texture.userData.mimeType === 'image/jpeg')
       delete texture.userData.mimeType;

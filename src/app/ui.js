@@ -1,5 +1,7 @@
 import * as THREE from 'three';
-import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
+import { exportGLB, downloadBlob } from './export/exporters.js';
+import { createExportSnapshot } from './export/snapshot.js';
+import { appendMaterialCatalog } from './export/material-catalog.js';
 import { zipSync } from 'three/addons/libs/fflate.module.js';
 import { Billboard, TreePreset, Tree, TreeType } from 'ez-environment';
 import { BarkType, LeafType, applyTreeTextures, loadPresetWithTextures } from './textures';
@@ -8,7 +10,6 @@ import { OrbitControls } from 'three/examples/jsm/Addons.js';
 import { version } from '../../package.json';
 import { cleanTreeDefinition,prepareTreeProject,commitTreeProject } from './studio/tree-project.js';
 
-const exporter = new GLTFExporter();
 
 // ============================================================================
 // Heroicons (outline style)
@@ -1140,101 +1141,64 @@ export function setupUI(tree, environment, renderer, scene, camera, orbitControl
 
   const exportModelsSection = createSection('Export Models', 'cubeTransparent', true);
 
-  /**
-   * GLTFExporter aborts on textures whose image never loaded (e.g. the
-   * texture file is missing on disk). Rendering tolerates them, so strip
-   * them from the materials for the duration of an export and restore after.
-   * @param {THREE.Object3D} root
-   * @returns {() => void} restore function
-   */
-  function stripBrokenTextures(root) {
-    const restores = [];
-    root.traverse((o) => {
-      const materials = Array.isArray(o.material) ? o.material : o.material ? [o.material] : [];
-      for (const material of materials) {
-        for (const key of ['map', 'aoMap', 'normalMap', 'roughnessMap', 'metalnessMap']) {
-          const texture = material[key];
-          if (texture?.isTexture && !texture.image) {
-            restores.push(() => { material[key] = texture; });
-            material[key] = null;
-          }
-        }
-      }
-    });
-    return () => restores.forEach((restore) => restore());
+  let exportTextureSize = 2048;
+  exportModelsSection.add(createSelect('Texture resolution', { '512 px':512, '1024 px':1024, '2048 px':2048, '4096 px':4096 }, exportTextureSize, value => { exportTextureSize = Number(value); }));
+  const materialNote = document.createElement('p');
+  materialNote.textContent = 'Materials and textures are included. ZIP exports also include reusable texture files and a material catalog.';
+  exportModelsSection.add(materialNote);
+
+  function treeExportSource(level, worldTransform = false) {
+    const { branches, leaves } = tree.createGeometry(Tree.defaultLODLevels[level].detail ?? {});
+    const group = new THREE.Group();group.name = `Tree_LOD${level}`;
+    const branchMesh = new THREE.Mesh(branches, tree.branchesMesh.material);branchMesh.name = `Branches_LOD${level}`;
+    const leafMesh = new THREE.Mesh(leaves, tree.leavesMesh.material);leafMesh.name = `Leaves_LOD${level}`;
+    group.add(branchMesh, leafMesh);
+    if (tree.trellisMesh) group.add(tree.trellisMesh.clone(true));
+    if (worldTransform) { group.position.copy(tree.position);group.quaternion.copy(tree.quaternion);group.scale.copy(tree.scale); }
+    return { group, dispose() { branches.dispose(); leaves.dispose(); } };
   }
 
   const exportGlbBtn = createButton('Export GLB (Full Detail)', 'download', async ({ setStatus }) => {
     setStatus('Exporting GLB…');
-    // Export at full detail regardless of the active LOD preview
-    const restoreLevel = previewLevel;
-    if (restoreLevel !== 0) {
-      setPreviewLevel(0);
-    }
-    const restoreTextures = stripBrokenTextures(tree);
+    let source;
     try {
-      await paint();
-      const glb = await new Promise((resolve, reject) =>
-        exporter.parse(tree, resolve, reject, { binary: true }),
-      );
-      const blob = new Blob([glb], { type: 'application/octet-stream' });
-      const link = document.getElementById('downloadLink');
-      link.href = window.URL.createObjectURL(blob);
-      link.download = 'tree.glb';
-      link.click();
+      source = treeExportSource(0, true);
+      downloadBlob(await exportGLB(source.group, { maxTextureSize: exportTextureSize }), 'tree.glb');
     } catch (err) {
       console.error(err);
+      window.__EZ_ENVIRONMENT__?.studio.status(err.message, true);
     } finally {
-      restoreTextures();
-      if (restoreLevel !== 0) {
-        setPreviewLevel(restoreLevel);
-      }
+      source?.dispose();
     }
   });
   exportModelsSection.add(exportGlbBtn);
 
   const exportLodsBtn = createButton('Export LODs (ZIP)', 'archive', async ({ setStatus }) => {
-    const restoreTextures = stripBrokenTextures(tree);
+    const snapshot = createExportSnapshot(), sources = [];
     try {
       const files = {};
+      // Capture all geometry and appearance before yielding to UI edits.
+      for (let i = 0; i < Tree.defaultLODLevels.length; i++) sources.push(treeExportSource(i));
+      const groups = sources.map(source => snapshot.object(source.group));
+      const maxTextureSize = exportTextureSize;
       for (let i = 0; i < Tree.defaultLODLevels.length; i++) {
         setStatus(`Exporting LOD ${i + 1}/${Tree.defaultLODLevels.length}…`);
         await paint();
 
-        const { detail } = Tree.defaultLODLevels[i];
-        const { branches, leaves } = tree.createGeometry(detail ?? {});
-
-        try {
-          const branchesMesh = new THREE.Mesh(branches, tree.branchesMesh.material);
-          branchesMesh.name = `Branches_LOD${i}`;
-          const leavesMesh = new THREE.Mesh(leaves, tree.leavesMesh.material);
-          leavesMesh.name = `Leaves_LOD${i}`;
-          const group = new THREE.Group();
-          group.name = `Tree_LOD${i}`;
-          group.add(branchesMesh, leavesMesh);
-
-          const glb = await new Promise((resolve, reject) =>
-            exporter.parse(group, resolve, reject, { binary: true }),
-          );
-          files[`tree_LOD${i}.glb`] = new Uint8Array(glb);
-        } finally {
-          branches.dispose();
-          leaves.dispose();
-        }
+        files[`tree_LOD${i}.glb`] = new Uint8Array(await exportGLB(groups[i], { maxTextureSize }));
       }
 
-      setStatus('Zipping…');
+      await appendMaterialCatalog(files);
+      setStatus('Zipping materials and textures…');
       await paint();
 
       const blob = new Blob([zipSync(files)], { type: 'application/zip' });
-      const link = document.getElementById('downloadLink');
-      link.href = URL.createObjectURL(blob);
-      link.download = 'tree_lods.zip';
-      link.click();
+      downloadBlob(blob, 'tree_lods.zip');
     } catch (err) {
       console.error(err);
+      window.__EZ_ENVIRONMENT__?.studio.status(err.message, true);
     } finally {
-      restoreTextures();
+      snapshot.dispose();sources.forEach(source => source.dispose());
     }
   });
   exportModelsSection.add(exportLodsBtn);

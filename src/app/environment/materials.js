@@ -1,5 +1,7 @@
 import * as THREE from 'three';
 import { BIOMES } from './biomes.js';
+import { bakeTerrainTile,terrainSources } from './terrain-bake.js';
+export { disposeTerrainGround } from './terrain-bake.js';
 
 export class BiomeMaterials {
   constructor(){this.cache=new Map();this.loader=typeof document==='undefined'?null:new THREE.TextureLoader();}
@@ -19,26 +21,40 @@ export class BiomeMaterials {
     })();this.cache.set(key,promise);return promise;
   }
   async prepare(options){
-    if(options.composition!=='biome')return null;
     const size=options.appearance==='photorealistic'&&options.quality!=='low'?2048:1024;
-    const [first,second,stone]=await Promise.all([...BIOMES[options.biome].surface,options.biome==='desert'?'sandstone':'weathered-rock'].map(id=>this.surface(id,size)));
+    const surfaces=options.composition==='biome'?BIOMES[options.biome].surface:['meadow-soil','dry-earth'];
+    const [first,second,stone]=await Promise.all([...surfaces,options.biome==='desert'?'sandstone':'weathered-rock'].map(id=>this.surface(id,size)));
     return {first,second,stone};
   }
-  ground(options,maps){
-    const material=new THREE.MeshStandardMaterial({vertexColors:true,roughness:1});
-    if(!maps?.first)return material;
-    material.map=maps.first.color;material.normalMap=maps.first.normal;material.roughnessMap=maps.first.roughness;
-    material.normalScale.setScalar(options.appearance==='photorealistic'?.7:.3);
-    material.userData.viewportEffect='Biome surface blending; GLB uses the primary PBR texture and vertex color.';
-    material.onBeforeCompile=shader=>{
-      shader.uniforms.ezGroundSecond={value:maps.second.color};
-      shader.vertexShader='attribute float biomeBlend; varying float vBiomeBlend;\n'+shader.vertexShader;
-      shader.vertexShader=shader.vertexShader.replace('#include <begin_vertex>','#include <begin_vertex>\nvBiomeBlend=biomeBlend;');
-      shader.fragmentShader='uniform sampler2D ezGroundSecond; varying float vBiomeBlend;\n'+shader.fragmentShader;
-      shader.fragmentShader=shader.fragmentShader.replace('#include <map_fragment>',`vec4 primary=texture2D(map,vMapUv);vec4 secondary=texture2D(ezGroundSecond,vMapUv*.83);diffuseColor*=mix(primary,secondary,clamp(vBiomeBlend,0.0,1.0));`);
+  ground(options,maps,geometry){
+    const create=(surface,owned=false)=>{
+      const material=new THREE.MeshStandardMaterial({vertexColors:true,roughness:1,metalness:0});
+      material.name='Terrain PBR';
+      if(surface){material.map=surface.color;material.normalMap=surface.normal;material.roughnessMap=surface.roughness;}
+      material.normalScale.setScalar(options.appearance==='photorealistic'?.7:.3);
+      material.userData.ownedTerrainTextures=owned;
+      return material;
     };
-    material.customProgramCacheKey=()=> 'ez-biome-ground-v1';
-    return material;
+    // CPU-only geometry consumers do not create GPU textures.
+    if(!maps?.first){
+      if(this.loader)throw new Error('Terrain PBR textures are not ready.');
+      return Array.from({length:5},()=>create(null));
+    }
+    const tiles=geometry?.userData.terrainTiles;
+    if(!tiles?.length)throw new Error('Terrain geometry is missing its PBR tile layout.');
+    const sources=terrainSources(maps,options,tiles[0],1024,['color','roughness']),materials=[];
+    // Keep full source relief in a portable TEXCOORD_1 normal map. Baking all
+    // normal detail into a world atlas would erase fine relief at large radii.
+    const normal=maps.first.normal.clone();normal.channel=1;
+    try{
+      for(const tile of tiles)materials.push(create({...bakeTerrainTile(options,tile,sources,1024,['color','roughness']),normal},true));
+      materials.push(create(maps.first));
+      return materials;
+    }catch(error){
+      normal.dispose();
+      for(const material of materials){for(const key of ['map','normalMap','roughnessMap'])material[key]?.dispose();material.dispose();}
+      throw new Error(`Could not bake terrain PBR materials. ${error.message}`);
+    }
   }
   dispose(){for(const p of this.cache.values())p.then(m=>m&&Object.values(m).forEach(t=>t.dispose())).catch(()=>{});this.cache.clear();}
 }

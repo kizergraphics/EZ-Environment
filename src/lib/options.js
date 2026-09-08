@@ -133,6 +133,8 @@ export default class TreeOptions {
       // Color map supplied by the caller. THREE.Texture or null.
       // When null, leaves render as a flat tinted quad.
       map: null,
+      normalMap: null,
+      roughnessMap: null,
 
       // Whether to use single or double/perpendicular billboards
       billboard: Billboard.Double,
@@ -197,6 +199,7 @@ export default class TreeOptions {
 
       // Color of trellis
       color: 0x8b4513,
+      maps: { map: null, normalMap: null, roughnessMap: null },
     };
   }
 

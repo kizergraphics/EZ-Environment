@@ -40,8 +40,9 @@ function verifyClosed(geometry) {
     const vertices = Array.from(index.slice(i, i + 3));
     assert.equal(new Set(vertices).size, 3);
     for (let edge = 0; edge < 3; edge++) {
-      const x = vertices[edge],
-        y = vertices[(edge + 1) % 3];
+      const positionKey = v => `${positions.getX(v)},${positions.getY(v)},${positions.getZ(v)}`;
+      const x = positionKey(vertices[edge]),
+        y = positionKey(vertices[(edge + 1) % 3]);
       const key = x < y ? `${x}:${y}` : `${y}:${x}`;
       const previous = edges.get(key) ?? { count: 0, direction: 0 };
       previous.count++;
@@ -70,7 +71,7 @@ function verifyClosed(geometry) {
     );
   }
   assert.equal(
-    positions.count - edges.size + index.length / 3,
+    new Set(Array.from({length:positions.count},(_,i)=>`${positions.getX(i)},${positions.getY(i)},${positions.getZ(i)}`)).size - edges.size + index.length / 3,
     2,
     'Closed sphere topology',
   );

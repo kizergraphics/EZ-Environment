@@ -5,12 +5,15 @@ import { generateRock,createRockDefinition } from '../generators/rocks.js';
 import { disposeObject } from './assets.js';
 import { random, hash } from './random.js';
 import { formationLayout } from '../generators/rock-forms.js';
+import { prepareAssetMaterials } from '../materials/pbr.js';
 
 function geometricAsset(kind,make){
   const lods=[0,1,2].map(level=>{
     const group=new THREE.Group();group.name=`lod${level}`;
     const pieces=make(level),geometry=mergeGeometries(pieces);pieces.forEach(g=>g.dispose());
-    group.add(new THREE.Mesh(geometry,new THREE.MeshStandardMaterial({color:kind==='cactus'?'#6d7950':'#55422e',roughness:1})));return group;
+    const material = new THREE.MeshStandardMaterial({color:kind==='cactus'?'#6d7950':'#55422e',roughness:1});
+    material.userData.pbrFamily = kind==='cactus'?'stem':'bark';
+    group.add(new THREE.Mesh(geometry,material));return group;
   });
   return {definition:{version:1,archetype:kind},definitionHash:`${kind}-v1`,object3D:lods[0],lods,dispose(){lods.forEach(g=>disposeObject(g));}};
 }
@@ -62,6 +65,7 @@ function outcropAsset(kind){
   const definitionHash=`rock-formation-${hash(definition)}`;
   const material=new THREE.MeshStandardMaterial({color:definition.color,roughness:definition.roughness,metalness:0,vertexColors:true,flatShading:true});
   material.name=`${kind}-stone`;
+  material.userData.pbrFamily = sandstone ? 'sandstone' : 'stone';
   const lods=[0,1,2].map(level=>{
     const parts=layout.map(slab=>outcropSlab(slab,level,sandstone)),geometry=mergeGeometries(parts);parts.forEach(g=>g.dispose());
     geometry.computeBoundingBox();geometry.computeBoundingSphere();geometry.userData={archetype:'boulder',formationPieces:layout.length};
@@ -84,21 +88,30 @@ export function extraSpecies(kind){
       const tip=new THREE.CapsuleGeometry(.12,.6,2,n);tip.translate(side*.56,1.18+side*.2,0);pieces.push(tip);
     }return pieces;
   });
-  if(kind==='fallen_log')return geometricAsset(kind,level=>{
-    const trunk=new THREE.CylinderGeometry(.2,.32,4,[12,8,5][level]);trunk.rotateZ(Math.PI/2);trunk.translate(0,.25,0);
-    const limb=new THREE.CylinderGeometry(.045,.12,1.6,[8,6,4][level]);limb.rotateZ(-.85);limb.translate(.3,.6,0);return [trunk,limb];
-  });
+  if(kind==='fallen_log'){
+    const asset=generatePlant(createPlantDefinition('deadwood',{seed:7105,width:4,height:1.05,branches:1}));
+    // Keep the legacy species identifier in packs and saved registry definitions.
+    asset.definition={version:1,archetype:kind};asset.definitionHash=`${kind}-v1`;
+    return asset;
+  }
   const stone={sandstone:['rock',{color:'#c3a37b',angularity:.85,roundness:.18}],desert_pebble:['pebble',{color:'#aa9374'}]}[kind];
   return stone?generateRock(createRockDefinition(stone[0],stone[1])):null;
+}
+
+/** Use precisely the same source hierarchy for preview and every pack format. */
+export function selectAssetAppearance(asset, options = {}) {
+  if (options.appearance !== 'photorealistic' || options.composition !== 'biome' || !asset.photoLods?.length) return asset;
+  return { ...asset, lods: asset.photoLods, object3D: asset.photoLods[0] };
 }
 
 export async function addFoliageVariants(registry){
   if(typeof document==='undefined')return;
   const loader=new THREE.TextureLoader();
   const specs=[['fern','fern-frond',1.4,1.05,6],['dry_shrub','dry-shrub',1.2,.95,3],['grass','meadow-foliage',1.35,1.05,3],['grass_tall','meadow-foliage',1.3,1.8,3],['shrub','broadleaf',1.6,1.4,5],['bush','broadleaf',2,1.1,5]];
-  const textures=new Map();
+  const textures=new Map(), created=[];
   try{
     for(const [id,file,width,height,count] of specs){
+      if (!registry.has(id)) continue;
       if(!textures.has(file)){const t=await loader.loadAsync(`/textures/biomes/foliage/${file}.png`);t.colorSpace=THREE.SRGBColorSpace;t.anisotropy=8;textures.set(file,t);}
       const asset=registry.get(id),map=textures.get(file);
       asset.photoLods=[0,1,2].map(level=>{
@@ -107,10 +120,18 @@ export async function addFoliageVariants(registry){
           const g=new THREE.PlaneGeometry(width,height,1,3);g.translate(0,height*.5,0);g.rotateY(i*Math.PI/n);g.setAttribute('windWeight',new THREE.Float32BufferAttribute(Array.from({length:g.attributes.position.count},(_,j)=>g.attributes.position.getY(j)/height),1));parts.push(g);
         }
         const geometry=mergeGeometries(parts);parts.forEach(g=>g.dispose());const group=new THREE.Group();group.name=`lod${level}`;
-        group.add(new THREE.Mesh(geometry,new THREE.MeshStandardMaterial({map,color:'#ffffff',roughness:1,side:THREE.DoubleSide,alphaTest:.45,alphaToCoverage:true})));return group;
+        const material = new THREE.MeshStandardMaterial({map,color:'#ffffff',roughness:1,side:THREE.DoubleSide,alphaTest:.45,alphaToCoverage:true});
+        material.userData.pbrFamily = 'foliage';
+        material.userData.pbrPreserveColorMap = true;
+        group.add(new THREE.Mesh(geometry,material));return group;
       });
       const original=asset.dispose;asset.dispose=()=>{original();asset.photoLods.forEach(g=>disposeObject(g));};
+      created.push({asset, original});
+      await prepareAssetMaterials({ lods: asset.photoLods });
     }
     return {dispose(){textures.forEach(t=>t.dispose());}};
-  }catch(error){textures.forEach(t=>t.dispose());throw error;}
+  }catch(error){
+    for(const {asset,original} of created){asset.photoLods.forEach(g=>disposeObject(g));delete asset.photoLods;asset.dispose=original;}
+    textures.forEach(t=>t.dispose());throw error;
+  }
 }

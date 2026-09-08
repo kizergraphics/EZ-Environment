@@ -86,6 +86,7 @@ export function createRockDefinition(archetype = 'rock', overrides = {}) {
     asymmetry: 0.35,
     frequency: 2.4,
     roughness: 0.88,
+    surfaceMaterial: 'stone', textureScale: 1,
     flatShading: false,
     variation: 0.15,
     count: 18,
@@ -97,6 +98,8 @@ export function createRockDefinition(archetype = 'rock', overrides = {}) {
   };
   if (result.version !== 1)
     throw new Error(`Unsupported rock preset version: ${result.version}`);
+  if (!['stone','sandstone'].includes(result.surfaceMaterial)) throw new Error('Unknown rock surfaceMaterial.');
+  finite(result.textureScale, 'textureScale', .05, 20);
   finite(result.seed, 'seed', 0, 0xffffffff, true);
   for (const field of ['width', 'height', 'depth'])
     finite(result[field], field, 0.01, 200);
@@ -422,6 +425,24 @@ function colliderFor(group, mode) {
   return { mode: 'convex', vertices, indices };
 }
 
+// Keep mineral detail legible on small pebbles while retaining a useful physical
+// grain scale on larger rocks. Face projection remains plain exportable UV data.
+function projectStoneUV(geometry, tileSize) {
+  const uv = geometry.attributes.uv, pos = geometry.attributes.position;
+  const a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3(), normal = new THREE.Vector3();
+  for (let i = 0; i < pos.count; i += 3) {
+    a.fromBufferAttribute(pos, i); b.fromBufferAttribute(pos, i + 1); c.fromBufferAttribute(pos, i + 2);
+    normal.crossVectors(b.sub(a), c.sub(a));
+    const x = Math.abs(normal.x), y = Math.abs(normal.y), z = Math.abs(normal.z);
+    for (let j = i; j < i + 3; j++) {
+      if (y >= x && y >= z) uv.setXY(j, pos.getX(j) / tileSize, -pos.getZ(j) / tileSize);
+      else if (x >= z) uv.setXY(j, pos.getZ(j) / tileSize, pos.getY(j) / tileSize);
+      else uv.setXY(j, pos.getX(j) / tileSize, pos.getY(j) / tileSize);
+    }
+  }
+  uv.needsUpdate = true;
+}
+
 /** Generate three exportable LOD groups. Clones share resources; dispose once. */
 export function generateRock(
   input = createRockDefinition(),
@@ -438,6 +459,7 @@ export function generateRock(
     vertexColors: true,
     flatShading: definition.flatShading,
   });
+  material.userData = { pbrFamily: definition.surfaceMaterial, pbrTextureScale: definition.textureScale, pbrNormalScale: definition.surfaceMaterial === 'sandstone' ? .6 : .75 };
   material.name = `${definition.archetype}-stone`;
   const materialSet = new Set([material]);
   const geometrySet = new Set();
@@ -492,7 +514,7 @@ export function generateRock(
         }
         species.archetype = recipe.forms[index];
       }
-      const geometry = species.archetype==='slab'||formation
+      let geometry = species.archetype==='slab'||formation
         ? slabGeometry(formation?.[index]||{seed:species.seed,width:species.width,height:species.height,depth:species.depth},level,species.strata??.35,random)
         : rockGeometry(species, detail);
       if(species.archetype==='slab'&&!formation){
@@ -504,6 +526,15 @@ export function generateRock(
         for(let i=0;i<positions.count;i++){const shade=1-species.variation*(.5+.5*Math.sin(positions.getX(i)*4+species.seed)*Math.cos(positions.getZ(i)*5));colors.push(shade,shade,shade);}
         geometry.setAttribute('color',new THREE.Float32BufferAttribute(colors,3));stoneSurface(geometry,species);
       }
+      // Box projection in physical units gives caps and sides usable, consistent UVs.
+      // Separate corners permit face-specific projections without collapsed cap UVs.
+      const original = geometry;
+      geometry = geometry.index ? geometry.toNonIndexed() : geometry.clone();
+      original.dispose();
+      const pos = geometry.attributes.position;
+      projectStoneUV(geometry, Math.max(.15, Math.min(4, Math.max(species.width, species.height, species.depth) * 1.25)));
+      geometry.setIndex(Array.from({length:pos.count},(_,i)=>i));
+      geometry.computeBoundingBox(); geometry.computeBoundingSphere();
       geometry.userData.archetype = species.archetype;
       geometrySet.add(geometry);
       return geometry;
@@ -521,7 +552,7 @@ export function generateRock(
     group.updateMatrixWorld(true);
     if(formation){
       const bounds=new THREE.Box3().setFromObject(group),size=bounds.getSize(new THREE.Vector3()),center=bounds.getCenter(new THREE.Vector3());
-      for(const mesh of group.children){mesh.geometry.translate(-center.x,-bounds.min.y,-center.z);mesh.geometry.scale(definition.width/size.x,definition.height/size.y,definition.depth/size.z);mesh.geometry.computeVertexNormals();mesh.geometry.computeBoundingBox();mesh.geometry.computeBoundingSphere();}
+      for(const mesh of group.children){mesh.geometry.translate(-center.x,-bounds.min.y,-center.z);mesh.geometry.scale(definition.width/size.x,definition.height/size.y,definition.depth/size.z);mesh.geometry.computeVertexNormals();mesh.geometry.computeBoundingBox();mesh.geometry.computeBoundingSphere();projectStoneUV(mesh.geometry,Math.max(.15,Math.min(4,Math.max(definition.width,definition.height,definition.depth)*1.25)));}
     }
     group.userData.placement = {
       requested: definition.archetype === 'cluster' ? definition.count : 1,
@@ -567,6 +598,7 @@ const legacyRockPresets = [
       width: 0.24,
       height: 0.11,
       depth: 0.19,
+      surfaceMaterial: 'sandstone',
     }),
   },
   {
@@ -609,6 +641,7 @@ const legacyRockPresets = [
       width: 4,
       height: 2.4,
       depth: 2.8,
+      surfaceMaterial: 'sandstone',
     }),
   },
   {
@@ -653,5 +686,5 @@ const additions=[
 const biomeFor={Forest:'forest',Meadow:'meadow',Arid:'desert',Rocky:'rocky'};
 export const ROCK_PRESETS=Object.freeze([
   ...legacyRockPresets.map(p=>({...p,group:'General'})),
-  ...additions.map(([id,name,archetype,group,overrides])=>({id,name,group,definition:createRockDefinition(archetype,overrides)})),
+  ...additions.map(([id,name,archetype,group,overrides])=>({id,name,group,definition:createRockDefinition(archetype,{...(group==='Arid'?{surfaceMaterial:'sandstone'}:{}),...overrides})})),
 ].map(p=>Object.freeze({...p,layer:p.definition.archetype==='pebble'?'pebbles':['boulder','outcrop'].includes(p.definition.archetype)?'boulders':'rocks',biomes:Object.freeze(biomeFor[p.group]?[biomeFor[p.group]]:[]),definition:Object.freeze(p.definition)})));

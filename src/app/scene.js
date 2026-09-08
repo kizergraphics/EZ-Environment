@@ -7,6 +7,7 @@ import { random } from './environment/random.js';
 import { terrainHeight } from './environment/placement.js';
 import { applyBiome } from './environment/biomes.js';
 import { validateOptions } from './environment/options.js';
+import { awaitTextureReadiness } from './materials/readiness.js';
 
 export async function createScene(renderer) {
   const scene = new THREE.Scene();
@@ -36,6 +37,7 @@ export async function createScene(renderer) {
         t.options.seed=Math.floor(rng()*100000);t.generateLODs();forest.add(t);
         if(i%4===0)await new Promise(resolve=>setTimeout(resolve,0));
       }
+      await awaitTextureReadiness(forest);
     })();return legacyLoading;
   };
   scene.add(forest);
@@ -58,5 +60,6 @@ export async function createScene(renderer) {
     tree.position.y=terrainHeight(tree.position.x,tree.position.z,options);
   };
   await environment.initialize();
+  await awaitTextureReadiness(tree);
   return{scene,environment,tree,forest,camera,controls,refreshTreeSources,ensureLegacyForest,syncSceneVisibility};
 }

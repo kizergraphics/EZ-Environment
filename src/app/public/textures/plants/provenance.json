@@ -1,0 +1,8 @@
+{
+  "leaf-surface-v1.png": {
+    "source": "Built-in ImageGen, generated for EZ Environment on 2026-09-07",
+    "description": "Single broad leaf interior albedo with central midrib, secondary and reticulate veins, pores and chlorophyll variation. No branch atlas or painted lighting.",
+    "processing": "Runtime tint-compatible albedo preserves source contrast. Normal and roughness maps are artistic derivatives of luminance, not measured scan data.",
+    "scope": "Generated plant surfaces; existing tree maps remain unchanged."
+  }
+}

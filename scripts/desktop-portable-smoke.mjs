@@ -7,6 +7,9 @@ import { copyFile, mkdir, mkdtemp, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
+import { unzipSync } from 'three/addons/libs/fflate.module.js';
+import { validateMaterialCatalog } from '../src/app/export/material-catalog.js';
 
 const source = path.resolve(process.argv[2] || 'release/EZ-Environment-1.1.0-Portable.exe');
 const digest = createHash('sha256');
@@ -92,6 +95,8 @@ try {
       bundledModules: [...document.querySelectorAll('script[src]')].map(script => script.src),
       remoteBlocked: await fetch('https://example.com/').then(() => false).catch(() => true),
       localDecoderStatus: await fetch('/draco/draco_decoder.wasm').then(r => r.status),
+      localLeafSurfaceStatus: await fetch('/textures/plants/leaf-surface-v1.png').then(r => r.status),
+      localWoodSurfaceStatus: await fetch('/textures/wood/weathered-grain-v1.png').then(r => r.status),
       renderer: ext ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER),
       dpr: devicePixelRatio,
       resolution: [window.__EZ_ENVIRONMENT__.renderer.domElement.width, window.__EZ_ENVIRONMENT__.renderer.domElement.height],
@@ -101,6 +106,8 @@ try {
   assert.equal(checks.processType, 'undefined');
   assert.equal(checks.remoteBlocked, true);
   assert.equal(checks.localDecoderStatus, 200);
+  assert.equal(checks.localLeafSurfaceStatus, 200);
+  assert.equal(checks.localWoodSurfaceStatus, 200);
   assert.equal(checks.dpr, 1); assert.deepEqual(checks.resolution, [1920, 1080]);
   const modes = [];
   for (const mode of ['plant', 'rock', 'environment', 'tree']) {
@@ -109,11 +116,16 @@ try {
       await a.studio.setMode(mode);
       if (mode === 'environment') { await a.environment.setOptions({ quality: 'medium', appearance: 'naturalistic' }); a.studio.renderPanel(); }
       a.render();
+      let pbrMaterials = 0, pbrReady = true;
+      if (['plant','rock'].includes(mode)) for (const lod of a.studio.asset.lods) lod.traverse(mesh => {
+        if (mesh.material?.userData.pbrFamily) { pbrMaterials++; pbrReady &&= ['map','normalMap','roughnessMap'].every(key => mesh.material[key]?.image?.width > 0); }
+      });
       const replay = mode === 'environment' && benchmark ? await a.runBenchmark({ duration: 30000, warmup: 10000, replay: true }) : null;
-      return { mode: a.mode, generated: ['plant', 'rock'].includes(mode) ? Boolean(a.studio.asset?.definitionHash) : a.environment.ready, environmentVisible:a.environment.visible, latest:a.studio.lastAuthoredMode, previewVisible:a.studio.viewportGroup.visible, assetMode:a.studio.assetMode, drawCalls: a.renderer.info.render.calls, replay };
+      return { mode: a.mode, generated: ['plant', 'rock'].includes(mode) ? Boolean(a.studio.asset?.definitionHash) : a.environment.ready, environmentVisible:a.environment.visible, latest:a.studio.lastAuthoredMode, previewVisible:a.studio.viewportGroup.visible, assetMode:a.studio.assetMode, drawCalls: a.renderer.info.render.calls, pbrMaterials, pbrReady, replay };
     }, {mode,benchmark:process.env.EZ_PORTABLE_BENCH!=='0'});
     assert.equal(result.mode, mode);
     assert.equal(result.generated, true);
+    if (['plant','rock'].includes(mode)) assert.ok(result.pbrMaterials >= 3 && result.pbrReady, 'Every packaged asset LOD must have ready PBR textures.');
     assert.equal(result.environmentVisible,true);
     if(mode==='environment'){assert.equal(result.latest,'rock');assert.equal(result.assetMode,'rock');assert.equal(result.previewVisible,true);}
     assert.ok(result.drawCalls > 0);
@@ -122,9 +134,48 @@ try {
     await page.screenshot({ path: path.join(output, `portable-${mode}.png`) });
   }
   assert.deepEqual(errors, []);
+  // Exercise the packaged export button with all resource requests restricted to
+  // the app's offline origin. Direct downloads avoid an interactive save dialog.
+  await page.evaluate(async () => { const studio=window.__EZ_ENVIRONMENT__.studio; await studio.setMode('plant'); studio.renderPanel(); });
+  if(process.env.EZ_PORTABLE_WOOD_ONLY==='1'){
+    await page.locator('#studio-panel select[aria-label="Preset"]').selectOption('fallen-log');
+    await page.waitForFunction(()=>!window.__EZ_ENVIRONMENT__.studio.pending&&window.__EZ_ENVIRONMENT__.studio.asset.definition.archetype==='deadwood');
+    await page.screenshot({path:path.join(output,'portable-wood.png')});
+  }
+  assert.equal(await page.locator('#studio-panel select[aria-label="Texture resolution"]').inputValue(), '2048');
+  await page.locator('#studio-panel select[aria-label="Texture resolution"]').selectOption('512');
+  const downloads = await browser.newBrowserCDPSession();
+  await downloads.send('Browser.setDownloadBehavior', { behavior: 'allowAndName', downloadPath: output, eventsEnabled: true });
+  let downloadTimer;
+  const completedDownload = new Promise((resolve,reject) => {
+    downloadTimer=setTimeout(()=>reject(new Error('Packaged texture download did not complete.')),120000);
+    downloads.on('Browser.downloadProgress', event => {
+      if(event.state==='completed'){clearTimeout(downloadTimer);resolve(path.join(output,event.guid));}
+      if(event.state==='canceled'){clearTimeout(downloadTimer);reject(new Error('Packaged texture download canceled.'));}
+    });
+  });
+  completedDownload.catch(()=>{});
+  const pendingDownload = page.waitForEvent('download', { timeout: 120000 });
+  await page.getByRole('button', { name: 'Export asset + LOD pack', exact: true }).click();
+  await pendingDownload;
+  const exportedPath = path.join(output, 'portable-textured-pack.zip');
+  try { await copyFile(await completedDownload, exportedPath); }
+  finally { clearTimeout(downloadTimer); }
+  const packFiles = unzipSync(new Uint8Array(await readFile(exportedPath)));
+  const materialCatalog = JSON.parse(new TextDecoder().decode(packFiles['materials.json']));
+  assert.ok(validateMaterialCatalog(materialCatalog, new Map(Object.entries(packFiles))));
+  assert.ok(materialCatalog.textures.length > 0 && packFiles['textures/LICENSE.txt'] && packFiles['textures/plant-provenance.json']);
+  if(process.env.EZ_PORTABLE_WOOD_ONLY==='1'){
+    assert.ok(packFiles['textures/wood-provenance.json']);
+    assert.ok(materialCatalog.materials.some(material=>/cut ends/i.test(material.name)));
+    assert.equal(materialCatalog.bindings.length,3);
+  }
+  checks.texturedExport = { materials: materialCatalog.materials.length, textures: materialCatalog.textures.length, file: exportedPath, defaultTextureCap: 2048 };
+  await downloads.detach();
   const biomes=[];
   const catalog=[];
   for(const [mode,expected,ids]of [['plant',27,['moss-cushion','young-pine','fallen-log','short-meadow-grass','tall-seed-grass','saguaro-cactus','agave-rosette']],['rock',22,['limestone-slab','mossy-forest-boulder','talus-scree','sandstone-outcrop']]]){
+    if(process.env.EZ_PORTABLE_SURFACE_ONLY==='1')break;
     await page.evaluate(mode=>window.__EZ_ENVIRONMENT__.studio.setMode(mode),mode);
     const selector=page.locator('#studio-panel select[aria-label="Preset"]');assert.equal(await selector.locator('option').count(),expected+1);
     for(const id of ids){await selector.selectOption(id);await page.waitForFunction(()=>!window.__EZ_ENVIRONMENT__.studio.pending);assert.equal(await selector.inputValue(),id);catalog.push({mode,id,hash:await page.evaluate(()=>window.__EZ_ENVIRONMENT__.studio.asset.definitionHash)});}
@@ -132,7 +183,7 @@ try {
   }
   await page.evaluate(()=>window.__EZ_ENVIRONMENT__.studio.setMode('tree'));
   await page.evaluate(()=>window.__EZ_ENVIRONMENT__.studio.setMode('environment'));
-  for(const biome of ['forest','desert','meadow','rocky'])for(const appearance of ['naturalistic','photorealistic']){
+  for(const biome of process.env.EZ_PORTABLE_SURFACE_ONLY==='1'?[]:['forest','desert','meadow','rocky'])for(const appearance of ['naturalistic','photorealistic']){
     const result=await page.evaluate(async({biome,appearance})=>{
       const a=window.__EZ_ENVIRONMENT__,s=a.studio;await s.applyBiomePreset(biome);await s.envChange({appearance},{modified:false});s.cameraPreset('ground');a.render();
       return{biome:a.environment.options.biome,appearance:a.environment.options.appearance,hash:a.environment.placement.hash,ready:a.environment.ready&&!a.environment.loading,draws:a.renderPipeline.lastDraw.calls};

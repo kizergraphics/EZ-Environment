@@ -3,6 +3,10 @@ import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { hash as hashData } from '../environment/random.js';
 import { createExportSnapshot } from './snapshot.js';
+import { appendMaterialCatalog, validateMaterialCatalog } from './material-catalog.js';
+import { selectAssetAppearance } from '../environment/biome-species.js';
+import { awaitTextureReadiness } from '../materials/readiness.js';
+import { prepareAssetMaterials, assertPbrReady } from '../materials/pbr.js';
 import {
   zipSync,
   strToU8,
@@ -98,7 +102,7 @@ export function placementTransform(record) {
 export async function exportGLB(object, name, options = {}) {
   if (name && typeof name === 'object') options = name;
   checkAbort(options.signal);
-  const maxTextureSize = options.maxTextureSize ?? 4096;
+  const maxTextureSize = options.maxTextureSize ?? 2048;
   if (![128, 256, 512, 1024, 2048, 4096, 8192].includes(maxTextureSize))
     throw new Error(
       'Export texture size must be a power of two between 128 and 8192.',
@@ -108,7 +112,14 @@ export async function exportGLB(object, name, options = {}) {
   const snapshot = createExportSnapshot();
   let result;
   try {
-    result = await new GLTFExporter().parseAsync(snapshot.object(object), {
+    const copy = snapshot.object(object);
+    await awaitTextureReadiness(copy, options);
+    await prepareAssetMaterials({ object3D: copy }, options);
+    // Browser exports are finished surfaces. DOM-free geometry tools retain the
+    // existing mesh-only API; explicitly opt in to full validation there.
+    assertPbrReady(copy, { requireAll: options.requireTextures ?? typeof document !== 'undefined' });
+    checkAbort(options.signal);
+    result = await new GLTFExporter().parseAsync(copy, {
       binary: true,
       onlyVisible: false,
       trs: true,
@@ -252,7 +263,7 @@ export function createEnvironmentManifest(environment) {
   const assets = [...used].sort().map((id) => {
     const asset = environment.registry.get(id);
     if (!asset) throw new Error(`Placement references missing species: ${id}`);
-    return assetDescriptor(id, asset);
+    return assetDescriptor(id, selectAssetAppearance(asset, environment.options));
   });
   const staticObjects = [];
   if (environment.ground)
@@ -279,12 +290,10 @@ export function createEnvironmentManifest(environment) {
       appearance: environment.options.appearance ?? 'naturalistic',
       biome: environment.options.biome ?? null,
       lighting: cloneData(environment.options.lighting),
-      materialFallback: 'glTF metallic-roughness materials with source textures and colors',
+      materialFallback: 'glTF metallic-roughness PBR materials with embedded base color, normal, and roughness textures',
       limitations: [
-        'Viewport terrain material blending and detail variation are reduced to the primary surface material.',
         'Sky, fog, exposure, ambient occlusion, and viewport shadows must be recreated in the receiving renderer.',
         'Wind metadata is retained; animated vegetation requires a receiving shader.',
-        'Photographic foliage variants use their procedural source-asset LODs in packs.',
         'Static biome groves use their highest-detail geometry; viewport LOD selection is not exported.',
       ],
     },
@@ -483,6 +492,18 @@ function validateManifestData(manifest, inventory) {
   }
   for (const object of manifest.staticObjects ?? []) reference(object.file);
   for (const extra of manifest.additionalExports ?? []) reference(extra.file);
+  if (manifest.materialCatalog) {
+    reference(manifest.materialCatalog);
+    const bytes = available?.get(manifest.materialCatalog);
+    if (bytes instanceof Uint8Array) {
+      try {
+        const catalog = JSON.parse(strFromU8(bytes));
+        validateMaterialCatalog(catalog, available);
+        for (const texture of catalog.textures) reference(texture.file);
+      }
+      catch (error) { fail(error.message); }
+    }
+  }
   const inventoryPaths = new Set();
   for (const file of manifest.files ?? []) {
     if (
@@ -520,7 +541,8 @@ function validateManifestData(manifest, inventory) {
   return { valid: errors.length === 0, errors };
 }
 
-function finishPack(manifest, files, name, options) {
+async function finishPack(manifest, files, name, options) {
+  manifest.materialCatalog = await appendMaterialCatalog(files, options);
   manifest.files = Object.keys(files)
     .sort()
     .map((path) => ({ path, bytes: files[path].byteLength }));
@@ -529,8 +551,8 @@ function finishPack(manifest, files, name, options) {
     throw new Error(`Export validation failed: ${validation.errors.join(' ')}`);
   files['manifest.json'] = strToU8(JSON.stringify(manifest, null, 2));
   files['README.txt'] = strToU8(
-    'EZ Environment portable asset pack, format version 1.\nUnits: meters. Right-handed, Y up. Quaternion order: x,y,z,w.\nExtract the complete ZIP before importing manifest.json.\nGLBs are self-contained. Keep the assets/ and chunks/ paths intact.\nUnity: install com.unity.cloud.gltfast and use the included project Unity importer.\nPlant wind metadata is retained; the receiving game shader controls animation.\n' +
-    (manifest.presentation ? '\nAppearance transfer uses standard glTF material fallbacks. Viewport/Unity visual parity is not guaranteed.\n' + manifest.presentation.limitations.map(note => `- ${note}`).join('\n') + '\nLighting and appearance metadata are recorded in manifest.presentation.\n' : ''),
+    'EZ Environment portable asset pack, format version 1.\nUnits: meters. Right-handed, Y up. Quaternion order: x,y,z,w.\nExtract the complete ZIP before importing manifest.json.\nGLBs are self-contained. Separate reusable textures and materials.json are also included. Keep all pack paths intact.\nUnity: install com.unity.cloud.gltfast and use the included project Unity importer to create assigned, editable materials.\nPlant wind metadata is retained; the receiving game shader controls animation.\n' +
+    (manifest.presentation ? '\nSurface appearance transfers as embedded glTF PBR textures, including baked terrain blends and selected foliage variants. Lighting-dependent visual parity is not guaranteed.\n' + manifest.presentation.limitations.map(note => `- ${note}`).join('\n') + '\nLighting and appearance metadata are recorded in manifest.presentation.\n' : ''),
   );
   checkAbort(options.signal);
   const zip = zipSync(
@@ -563,12 +585,14 @@ async function appendAsset(asset, descriptor, files, options) {
 
 export async function exportAssetPack(asset, name = 'asset', options = {}) {
   checkAbort(options.signal);
+  options = { maxTextureSize: 2048, ...options };
   const id = filename(name, 'asset').replace(/\./g, '-');
   const descriptor = assetDescriptor(id, asset, '');
   const manifest = {
     format: 'ez-environment',
     version: 1,
     kind: 'asset',
+    exportSettings: { maxTextureSize: options.maxTextureSize },
     coordinates: { ...COORDINATES },
     assets: [descriptor],
     chunks: [],
@@ -587,7 +611,7 @@ export async function exportAssetPack(asset, name = 'asset', options = {}) {
 }
 
 export async function exportEnvironmentPack(environment, options = {}) {
-  options = { maxTextureSize: 1024, ...options };
+  options = { maxTextureSize: 2048, ...options };
   checkAbort(options.signal);
   if (environment.loading)
     throw new Error('Wait for environment generation before exporting.');
@@ -608,7 +632,7 @@ export async function exportEnvironmentPack(environment, options = {}) {
     const sources = new Map(
       manifest.assets.map((descriptor) => [
         descriptor.id,
-        snapshot.asset(environment.registry.get(descriptor.id)),
+        snapshot.asset(selectAssetAppearance(environment.registry.get(descriptor.id), environment.options)),
       ]),
     );
     const staticSources = new Map(
@@ -857,7 +881,8 @@ function treeDefinition(tree) {
     archetype: 'tree',
     ...source,
     bark: { ...source.bark, maps: undefined },
-    leaves: { ...source.leaves, map: undefined },
+    trellis: { ...source.trellis, maps: undefined, endMaps: undefined },
+    leaves: { ...source.leaves, map: undefined, normalMap: undefined, roughnessMap: undefined },
   });
   let hash = 2166136261;
   for (const character of stableTreeData(definition))

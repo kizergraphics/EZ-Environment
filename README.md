@@ -4,6 +4,8 @@ EZ Environment is a local plant, rock, and procedural environment studio with a 
 
 The project builds on the MIT-licensed [EZ-Tree](https://github.com/dgreenheck/ez-tree) library. Its original copyright and license notice are preserved in [LICENSE](LICENSE).
 
+Generated assets receive PBR color, normal, and roughness textures automatically, including all LODs and saved custom species. GLBs embed their textures; ZIP packs also include reusable texture files, source records and a material catalog. The Unity importer creates assigned editable materials shared across LODs and instances. The same surface materials appear in the viewport. Export controls default to a 2048 px cap without upscaling. Terrain blends use four bounded color/roughness tiles with repeating detailed normals. See [material sources](src/app/materials/README.md) for texture provenance and [Unity import](unity/README.md) for receiving-renderer setup.
+
 <p align="center">
 <img src="https://github.com/user-attachments/assets/cb5f5edd-3e1b-453d-925f-734965126b17">
 </p>

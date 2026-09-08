@@ -115,3 +115,37 @@ test('invalid LOD count rejects and disposal is safe with or without a pending j
   client.dispose(); client.dispose(); assert.equal(await canceled, null);
   assert.equal(client.pending, null); assert.equal(client.worker, null);
 });
+
+test('generation waits for materials and cancels a stale material preparation', async t => {
+  const Worker = installWorker(t), jobs = [];
+  const client = new GenerationClient((asset, { signal }) => new Promise(resolve => jobs.push({ asset, signal, resolve })));
+  const first = client.generate('plant', { seed: 1 }), worker = Worker.instances[0];
+  worker.message(response(worker));
+  assert.equal(jobs.length, 1);
+  assert.equal(client.worker, worker);
+  const second = client.generate('plant', { seed: 2 }), nextWorker = Worker.instances[1];
+  assert.equal(await first, null);
+  assert.equal(jobs[0].signal.aborted, true);
+  jobs[0].resolve();
+  await Promise.resolve();
+  assert.equal(client.worker, nextWorker);
+  nextWorker.message(response(nextWorker));
+  jobs[1].resolve();
+  const asset = await second;
+  assert.equal(asset.definition.seed, 2);
+  asset.dispose();
+});
+
+test('failed material preparation rejects generation and allows retry', async t => {
+  const Worker = installWorker(t);
+  const client = new GenerationClient(async () => { throw new Error('Missing stone texture'); });
+  const first = client.generate('rock', {});
+  const failure = assert.rejects(first, /Missing stone texture/);
+  Worker.instances[0].message(response(Worker.instances[0]));
+  await failure;
+  assert.equal(client.pending, null);
+  client.prepareMaterials = async () => {};
+  const second = client.generate('rock', {});
+  Worker.instances[1].message(response(Worker.instances[1]));
+  (await second).dispose();
+});

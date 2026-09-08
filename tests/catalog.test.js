@@ -48,7 +48,9 @@ test('new controls reject invalid input and old definitions do not acquire surfa
   assert.throws(()=>createPlantDefinition('cactus',{armCount:Infinity}));
   assert.throws(()=>createPlantDefinition('groundCover',{leafShape:'unknown'}));
   const rock=createRockDefinition('rock');assert.equal(Object.hasOwn(rock,'strata'),false);assert.equal(Object.hasOwn(rock,'weatheringAmount'),false);
-  const plant=generatePlant(createPlantDefinition('shrub'));assert.equal(plant.definitionHash,'plant-v1-caa041f9');plant.dispose();
+  const plant=generatePlant(createPlantDefinition('shrub'));
+  assert.equal(plant.definition.stemMaterial,'bark');assert.equal(plant.definition.leafMaterial,'foliage');
+  const roundtrip=generatePlant(JSON.parse(JSON.stringify(plant.definition)));assert.equal(plant.definitionHash,roundtrip.definitionHash);plant.dispose();roundtrip.dispose();
 });
 
 test('built-in preset IDs cannot be shadowed by custom species',async()=>{

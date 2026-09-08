@@ -5,7 +5,9 @@ import { createExportSnapshot } from '../src/app/export/snapshot.js';
 import {
   exportAssetPack,
   exportEnvironmentPack,
+  exportGLB,
 } from '../src/app/export/exporters.js';
+import { awaitTextureReadiness, registerTextureReadiness } from '../src/app/materials/readiness.js';
 
 globalThis.FileReader ??= class {
   readAsArrayBuffer(blob) {
@@ -294,4 +296,44 @@ test('wind metadata distinguishes actual weighted geometry from height-based veg
     }
     source.dispose();
   }
+});
+
+test('photographic biome packs select the visible foliage for every LOD', async () => {
+  const source = asset(), photo = asset(new THREE.MeshStandardMaterial({ color: '#88aa33', alphaTest: .45, side: THREE.DoubleSide }));
+  source.photoLods = photo.lods;
+  const environment = {
+    registry: new Map([['shrub', source]]),
+    options: { appearance: 'photorealistic', composition: 'biome' },
+    placement: { chunks: new Map([['0:0', { x: 0, z: 0, layers: { plants: { records: [{ species: 'shrub', position: [0,0,0], normal: [0,1,0], yaw: 0, scale: [1,1,1] }] } } }]]) },
+  };
+  const pack = await exportEnvironmentPack(environment, { download: false, includeBakedChunks: true });
+  for (const descriptor of pack.manifest.assets[0].lods) {
+    const material = gltf(pack.files[descriptor.file]).materials[0];
+    assert.equal(material.alphaMode, 'MASK');
+    assert.equal(material.doubleSided, true);
+    assert.deepEqual(material.pbrMetallicRoughness.baseColorFactor, [...photo.material.color.toArray(), 1]);
+  }
+  source.dispose(); photo.dispose();
+});
+
+test('export fails with a useful error for missing attached textures', async () => {
+  const texture = new THREE.Texture(), source = asset(new THREE.MeshStandardMaterial({ map: texture }));
+  await assert.rejects(exportGLB(source.object3D), /Texture is not ready/);
+  source.dispose(); texture.dispose();
+});
+
+test('snapshot waits for pending texture completion and cancels waiting without touching the source', async () => {
+  const texture = new THREE.Texture(), source = asset(new THREE.MeshStandardMaterial({ map: texture }));
+  let resolve;
+  registerTextureReadiness(texture, new Promise(done => { resolve = done; }));
+  const snapshot = createExportSnapshot(), copy = snapshot.object(source.object3D);
+  const controller = new AbortController();
+  const cancelled = awaitTextureReadiness(copy, { signal: controller.signal });
+  controller.abort();
+  await assert.rejects(cancelled, { name: 'AbortError' });
+  texture.image = { width: 2, height: 2, data: new Uint8Array(16) };
+  resolve();
+  await awaitTextureReadiness(copy);
+  assert.equal(copy.children[0].material.map.image, texture.image);
+  snapshot.dispose(); source.dispose(); texture.dispose();
 });
