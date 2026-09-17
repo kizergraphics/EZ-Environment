@@ -12,7 +12,9 @@ function geometricAsset(kind,make){
     const group=new THREE.Group();group.name=`lod${level}`;
     const pieces=make(level),geometry=mergeGeometries(pieces);pieces.forEach(g=>g.dispose());
     const material = new THREE.MeshStandardMaterial({color:kind==='cactus'?'#6d7950':'#55422e',roughness:1});
-    material.userData.pbrFamily = kind==='cactus'?'stem':'bark';
+    material.userData.pbrFamily = 'bark';
+    // Capsule UVs span the whole surface; extra tiling keeps the bark fine.
+    material.userData.pbrTextureScale = 4;
     group.add(new THREE.Mesh(geometry,material));return group;
   });
   return {definition:{version:1,archetype:kind},definitionHash:`${kind}-v1`,object3D:lods[0],lods,dispose(){lods.forEach(g=>disposeObject(g));}};
@@ -79,8 +81,16 @@ function outcropAsset(kind){
 }
 
 export function extraSpecies(kind){
-  if(kind==='sandstone_outcrop'||kind==='rock_outcrop')return outcropAsset(kind);
-  if(kind==='dry_shrub')return generatePlant(createPlantDefinition('shrub',{height:.8,width:1.1,branches:4,stemCount:3,density:.35,leafSize:.055,leafColor:'#8e8b64',stemColor:'#79694b'}));
+  if(kind==='sandstone_outcrop'||kind==='rock_outcrop'){
+    const sandstone=kind==='sandstone_outcrop';
+    return generateRock(createRockDefinition('outcrop',{
+      seed:sandstone?52111:682,
+      color:sandstone?'#bd9b70':'#838480',
+      surfaceMaterial:sandstone?'sandstone':'stone',
+      shapeProfile:'ledgestone',
+    }),{variants:true});
+  }
+  if(kind==='dry_shrub')return generatePlant(createPlantDefinition('shrub',{height:.8,width:1.1,branches:4,stemCount:3,density:.35,leafSize:.055,leafColor:'#8e8b64',barkType:'Bark014'}));
   if(kind==='cactus')return geometricAsset(kind,level=>{
     const n=[12,8,5][level],stem=new THREE.CapsuleGeometry(.18,1.9,3,n);stem.translate(0,1.12,0);const pieces=[stem];
     for(const side of [-1,1]){
@@ -95,7 +105,7 @@ export function extraSpecies(kind){
     return asset;
   }
   const stone={sandstone:['rock',{color:'#c3a37b',angularity:.85,roundness:.18}],desert_pebble:['pebble',{color:'#aa9374'}]}[kind];
-  return stone?generateRock(createRockDefinition(stone[0],stone[1])):null;
+  return stone?generateRock(createRockDefinition(stone[0],stone[1]),{variants:true}):null;
 }
 
 /** Use precisely the same source hierarchy for preview and every pack format. */

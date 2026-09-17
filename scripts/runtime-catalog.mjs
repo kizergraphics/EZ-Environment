@@ -15,7 +15,7 @@ try{
   });
   await page.evaluate(async()=>{const s=window.__EZ_ENVIRONMENT__.studio;await s.envChange({radius:24,quality:'medium'});});
   const inventory=await page.evaluate(async()=>{const {ASSET_PRESETS}=await import('/generators/catalog.js');return ASSET_PRESETS.map(p=>({id:p.id,layer:p.layer,form:p.definition.archetype}));});
-  for(const [mode,expected]of [['plant',27],['rock',22]]){
+  for(const [mode,expected]of [['plant',30],['rock',22]]){
     await page.locator(`[data-mode="${mode}"]`).click();
     assert.equal(await page.locator('#studio-panel select[aria-label="Preset"] option').count(),expected+1);
     assert.ok(await page.locator('#studio-panel select[aria-label="Preset"] optgroup').count()>=4);
@@ -52,7 +52,7 @@ try{
   // Isolated gallery for visual comparison under one camera and neutral lighting.
   await page.evaluate(async()=>{
     const THREE=await import(window.catalogModuleUrls.three),{ASSET_PRESETS}=await import('/generators/catalog.js'),{makeSpecies}=await import('/environment/species.js');
-    const ids=['berry-thicket','wood-sorrel','moss-cushion','young-pine','fallen-log','short-meadow-grass','tall-seed-grass','clover-groundcover','sagebrush','dry-bunchgrass','saguaro-cactus','agave-rosette','alpine-grass-tuft','heather-cushion','wet-river-stone','desert-gravel','low-fieldstone','basalt-chunk','standing-stone','limestone-slab','red-sandstone-slab','glacial-erratic','volcanic-boulder','mossy-forest-boulder','talus-scree','river-stone-bed','granite-outcrop','sandstone-outcrop'];
+    const ids=['bush-1','bush-2','bush-3','berry-thicket','wood-sorrel','moss-cushion','young-pine','fallen-log','short-meadow-grass','tall-seed-grass','clover-groundcover','sagebrush','dry-bunchgrass','saguaro-cactus','agave-rosette','alpine-grass-tuft','heather-cushion','wet-river-stone','desert-gravel','low-fieldstone','basalt-chunk','standing-stone','limestone-slab','red-sandstone-slab','glacial-erratic','volcanic-boulder','mossy-forest-boulder','talus-scree','river-stone-bed','granite-outcrop','sandstone-outcrop'];
     const overlay=document.createElement('div');overlay.id='catalog-gallery';Object.assign(overlay.style,{position:'fixed',inset:'0',zIndex:10000,background:'#253036',display:'grid',gridTemplateColumns:'repeat(4,1fr)',gridAutoRows:'310px',alignContent:'start',overflow:'auto',padding:'12px',gap:'10px'});document.body.append(overlay);
     const renderer=new THREE.WebGLRenderer({antialias:true,preserveDrawingBuffer:true});renderer.setSize(340,270);renderer.setPixelRatio(1);renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=1.35;
     const scenes=[];

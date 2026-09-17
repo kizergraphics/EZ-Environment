@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
 import { createHash } from 'node:crypto';
-import { PLANT_ARCHETYPES, PLANT_PRESETS, createPlantDefinition, generatePlant } from '../src/app/generators/plants.js';
+import { PLANT_ARCHETYPES, PLANT_PRESETS, LEAF_DESIGNS, PLANT_BARK_TYPES, createPlantDefinition, generatePlant } from '../src/app/generators/plants.js';
 
 function geometryHash(asset) {
   const hash = createHash('sha256');
@@ -86,6 +86,16 @@ test('every archetype has a curated preset and presets can round trip through Ob
   }
 });
 
+test('legacy Bush 1-3 names are represented by distinct Forest plant presets', () => {
+  assert.equal(PLANT_PRESETS.length, 30);
+  const migrated = ['bush-1', 'bush-2', 'bush-3'].map(id => PLANT_PRESETS.find(preset => preset.id === id));
+  assert.deepEqual(migrated.map(preset => preset?.name), ['Bush 1', 'Bush 2', 'Bush 3']);
+  assert.ok(migrated.every(preset => preset?.group === 'Forest'));
+  assert.equal(new Set(migrated.map(preset => preset.definition.leafDesign)).size, 3);
+  assert.equal(new Set(migrated.map(preset => preset.definition.barkType)).size, 3);
+  assert.equal(migrated[2].definition.archetype, 'bush', 'Bush 3 remains a shrub form even though it uses conifer needles.');
+});
+
 test('extreme valid values remain bounded and produce usable geometry', () => {
   for (const archetype of PLANT_ARCHETYPES) {
     for (const overrides of [
@@ -110,6 +120,58 @@ test('validation rejects nonfinite values, invalid colors and unsupported defini
   const clamped = createPlantDefinition('shrub', { height: -10, width: 1e8, branches: 999, density: 999 });
   assert.equal(clamped.height, .05); assert.equal(clamped.width, 8); assert.equal(clamped.branches, 20); assert.equal(clamped.density, 2.5);
   assert.equal(createPlantDefinition('shrub', { leafColor: 0xaabbcc }).leafColor, '#aabbcc');
+  assert.throws(() => createPlantDefinition('shrub', { leafDesign: 'same-leaf' }), /leafDesign/);
+  assert.throws(() => createPlantDefinition('shrub', { barkType: 'Bark999' }), /barkType/);
+});
+
+test('leaf and bark designs are serialized, legacy leafShape maps forward, and silhouettes differ', () => {
+  assert.equal(createPlantDefinition('groundCover', { leafShape: 'clover' }).leafDesign, 'trifoliate');
+  assert.equal(createPlantDefinition('groundCover', { leafShape: 'lance' }).leafDesign, 'lanceolate');
+  assert.equal(createPlantDefinition('groundCover', { leafShape: 'clover' }).leafShape, undefined);
+  assert.ok(LEAF_DESIGNS.length >= 10);
+  assert.ok(PLANT_BARK_TYPES.length >= 4);
+  const leafyPresets = PLANT_PRESETS.filter(preset => !['cactus', 'deadwood'].includes(preset.definition.archetype));
+  const woodyPresets = PLANT_PRESETS.filter(preset => ['shrub', 'bush', 'sapling', 'coniferSapling'].includes(preset.definition.archetype));
+  assert.ok(new Set(leafyPresets.map(preset => preset.definition.leafDesign)).size >= 8);
+  assert.ok(new Set(woodyPresets.map(preset => preset.definition.barkType)).size >= 4);
+  const hashes = new Set();
+  for (const leafDesign of LEAF_DESIGNS) {
+    const asset = generatePlant(createPlantDefinition('groundCover', { seed: 27, leafDesign }));
+    hashes.add(geometryHash(asset));
+    const foliage = asset.object3D.children.find(mesh => mesh.userData.materialSlot === 'leaves');
+    assert.equal(foliage.material.userData.pbrVariant, leafDesign);
+    asset.dispose();
+  }
+  assert.equal(hashes.size, LEAF_DESIGNS.length, 'Every leaf design must produce a distinct mesh silhouette.');
+  const shrub = generatePlant(createPlantDefinition('shrub', { barkType: 'Bark014' }));
+  const stems = shrub.object3D.children.find(mesh => mesh.userData.materialSlot === 'stems');
+  assert.equal(stems.material.userData.pbrFamily, 'bark');
+  assert.equal(stems.material.userData.pbrVariant, 'Bark014');
+  shrub.dispose();
+});
+
+test('woody presets expose natural bark and retain authored tints', () => {
+  const presets = PLANT_PRESETS.filter(p => ['shrub', 'bush', 'sapling', 'coniferSapling'].includes(p.definition.archetype));
+  for (const preset of presets) assert.equal(preset.definition.stemColor, '#ffffff', preset.id);
+  const definition = createPlantDefinition('shrub', { stemColor: '#705b3d' });
+  const asset = generatePlant(JSON.parse(JSON.stringify(definition)));
+  assert.equal(asset.object3D.children[0].material.color.getHexString(), '705b3d', 'Saved or custom colors remain authored choices.');
+  asset.dispose();
+});
+
+test('bark keeps its surface scale on slender branches and across LODs', () => {
+  const asset = generatePlant(createPlantDefinition('shrub'));
+  const ranges = asset.lods.map(lod => {
+    const uv = lod.children.find(mesh => mesh.userData.materialSlot === 'stems').geometry.attributes.uv;
+    let maxU = 0, maxV = 0;
+    for (let i = 0; i < uv.count; i++) { maxU = Math.max(maxU, uv.getX(i)); maxV = Math.max(maxV, uv.getY(i)); }
+    assert.ok(maxV > 3, 'A long branch must tile bark along its length, not stretch one image.');
+    assert.ok(maxU < 1, 'A thin branch must sample a strip instead of compressing the whole source.');
+    return [maxU, maxV];
+  });
+  assert.deepEqual(ranges[0], ranges[1]);
+  assert.deepEqual(ranges[0], ranges[2]);
+  asset.dispose();
 });
 
 test('preview quality reduces geometry while preserving the definition and all three LODs', () => {

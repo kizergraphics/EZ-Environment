@@ -1,8 +1,8 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { Tree, TreePreset } from 'ez-environment';
+import { Tree } from 'ez-environment';
 import { Environment } from './environment.js';
-import { loadPresetWithTextures } from './textures.js';
+import { APP_TREE_PRESET_NAMES, loadPresetWithTextures } from './textures.js';
 import { random } from './environment/random.js';
 import { terrainHeight } from './environment/placement.js';
 import { applyBiome } from './environment/biomes.js';
@@ -30,7 +30,7 @@ export async function createScene(renderer) {
     if(forest.children.length===24)return;
     if(legacyLoading)return legacyLoading;
     legacyLoading=(async()=>{
-      const rng=random(18427),presets=Object.keys(TreePreset).filter(k=>!/Trellis/i.test(k));
+      const rng=random(18427),presets=APP_TREE_PRESET_NAMES.filter(k=>!/Trellis/i.test(k));
       for(let i=0;i<24;i++){
         const t=new Tree(),theta=rng()*Math.PI*2,r=130+rng()*150;
         t.position.set(r*Math.cos(theta),0,r*Math.sin(theta));loadPresetWithTextures(t,presets[Math.floor(rng()*presets.length)],false);

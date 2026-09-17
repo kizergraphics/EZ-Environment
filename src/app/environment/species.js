@@ -38,12 +38,12 @@ export function collectMeshes(root) {
 export function makeSpecies(kind, definition) {
   // Explicit authored definitions take precedence over fixed legacy species.
   if(definition && !(kind==='grass'&&definition.height===undefined) && kind!=='fallen_log'){
-    if(ROCK_ARCHETYPES.includes(kind))return generateRock(definition);
+    if(ROCK_ARCHETYPES.includes(kind))return generateRock(definition,{variants:true});
     return compactPlant(generatePlant(definition));
   }
   const extra=extraSpecies(kind);if(extra)return extra;
   if (kind === 'grass') return createGrass(definition?.variant);
-  if (ROCK_ARCHETYPES.includes(kind)) return generateRock(definition || createRockDefinition(kind));
+  if (ROCK_ARCHETYPES.includes(kind)) return generateRock(definition || createRockDefinition(kind),{variants:true});
   return compactPlant(generatePlant(definition || createPlantDefinition(kind)));
 }
 // Only untagged legacy mapless foliage can share a baked material. PBR slots must remain distinct. Bake each material's linear color

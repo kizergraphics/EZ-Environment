@@ -4,8 +4,10 @@ import { performance } from 'node:perf_hooks';
 import * as THREE from 'three';
 import {
   ROCK_PRESETS,
+  ROCK_SHAPE_PROFILES,
   createRockDefinition,
   generateRock,
+  selectRockVariant,
 } from '../src/app/generators/rocks.js';
 
 function fingerprint(asset) {
@@ -161,7 +163,8 @@ test('invalid presets fail with actionable validation errors', () => {
     { height: 0 },
     { width: NaN },
     { seed: -1 },
-    { version: 2 },
+    { version: 3 },
+    { shapeProfile: 'potato' },
     { archetype: 'mountain' },
     { frequency: Infinity },
     { color: 'red' },
@@ -177,6 +180,62 @@ test('invalid presets fail with actionable validation errors', () => {
     () => generateRock(createRockDefinition(), { quality: 'ultra' }),
     /quality/,
   );
+});
+
+test('v2 macro profiles create distinct silhouettes while v1 definitions stay legacy-compatible', () => {
+  const signatures = new Set();
+  for (const shapeProfile of ROCK_SHAPE_PROFILES) {
+    const asset = generateRock(createRockDefinition('rock', {
+      shapeProfile,
+      seed: 917,
+      angularity: .72,
+      roundness: .2,
+      displacement: .12,
+    }));
+    const position = asset.object3D.children[0].geometry.attributes.position;
+    signatures.add(Array.from({length:position.count},(_,i)=>[
+      position.getX(i).toFixed(3),position.getY(i).toFixed(3),position.getZ(i).toFixed(3),
+    ].join(',')).join('|'));
+    asset.dispose();
+  }
+  assert.equal(signatures.size, ROCK_SHAPE_PROFILES.length);
+  const legacy = createRockDefinition('rock', {version:1,shapeProfile:'wedge'});
+  assert.equal(legacy.version, 1);
+  assert.equal(Object.hasOwn(legacy, 'shapeProfile'), false);
+  const a=generateRock(legacy),b=generateRock({...legacy,shapeProfile:'standingShard'});
+  assert.equal(a.definitionHash,b.definitionHash);
+  assert.deepEqual(fingerprint(a),fingerprint(b));
+  a.dispose();b.dispose();
+  const oldOutcrop=generateRock(createRockDefinition('outcrop',{version:1,seed:41}));
+  const newOutcrop=generateRock(createRockDefinition('outcrop',{seed:41}));
+  assert.equal(oldOutcrop.object3D.children.length,4);
+  assert.ok(newOutcrop.object3D.children.length>=3&&newOutcrop.object3D.children.length<=5);
+  oldOutcrop.dispose();newOutcrop.dispose();
+});
+
+test('curated presets deliberately cover recognizable rock shape families', () => {
+  const profiles=new Map(ROCK_PRESETS.map(p=>[p.id,p.definition.shapeProfile]));
+  assert.equal(profiles.get('river-pebble'),'rounded');
+  assert.equal(profiles.get('low-fieldstone'),'fieldstone');
+  assert.equal(profiles.get('basalt-chunk'),'fracturedBlock');
+  assert.equal(profiles.get('angular-slate'),'wedge');
+  assert.equal(profiles.get('standing-stone'),'standingShard');
+  assert.equal(profiles.get('limestone-slab'),'ledgestone');
+  assert.equal(profiles.get('mossy-forest-boulder'),'irregularBoulder');
+});
+
+test('environment variant banks are deterministic and select three individual or two formation forms', () => {
+  for (const archetype of ['pebble','rock','boulder','slab','cluster','outcrop']) {
+    const a=generateRock(createRockDefinition(archetype,{seed:713}),{variants:true});
+    const b=generateRock(createRockDefinition(archetype,{seed:713}),{variants:true});
+    const expected=['cluster','outcrop'].includes(archetype)?2:3;
+    assert.equal(a.variants.length,expected);
+    assert.equal(b.variants.length,expected);
+    assert.equal(selectRockVariant(a,expected+1).variantIndex,1);
+    assert.deepEqual(a.variants.map(fingerprint),b.variants.map(fingerprint));
+    assert.notDeepEqual(fingerprint(a.variants[0]),fingerprint(a.variants[1]));
+    a.dispose();b.dispose();
+  }
 });
 
 test('cluster member geometry is shared, deterministic, spaced and bounded', () => {

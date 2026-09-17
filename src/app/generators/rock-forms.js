@@ -2,10 +2,29 @@ import * as THREE from 'three';
 
 // The connected, overlapping slab layout used by the biome outcrops. Dimensions
 // remain normalized here so the authoring generator can size the full formation.
-export function formationLayout(seed, random) {
+export function formationLayout(seed, random, version = 2) {
   const rng=random(seed);
-  return [[-.35,0,2.8,2.5,3.5],[-1.55,.25,2.2,2.1,2.35],[1.45,.10,2.35,2.2,1.9],[.2,1.15,2.7,1.85,1.25]]
+  if(version===1)return [[-.35,0,2.8,2.5,3.5],[-1.55,.25,2.2,2.1,2.35],[1.45,.10,2.35,2.2,1.9],[.2,1.15,2.7,1.85,1.25]]
     .map(([x,z,width,depth,height],i)=>({x,z,width,depth,height,base:0,yaw:(rng()-.5)*.35,seed:(seed+i*1597334677)>>>0}));
+  const count=3+Math.floor(rng()*3);
+  const direction=rng()*Math.PI*2,spread=.9+rng()*.45;
+  return Array.from({length:count},(_,i)=>{
+    const central=i===0,rank=i/Math.max(1,count-1);
+    const side=i===0?0:(i%2?1:-1)*(1.05+Math.ceil(i/2)*.58)*spread;
+    const along=central?0:(rng()-.5)*1.25+rank*.32;
+    const x=Math.cos(direction)*side-Math.sin(direction)*along;
+    const z=Math.sin(direction)*side+Math.cos(direction)*along;
+    const hierarchy=central?1:.74-rank*.18+rng()*.12;
+    return {
+      x,z,
+      width:(central?3.05:2.35-rank*.28)*(.9+rng()*.18),
+      depth:(central?2.55:2.05-rank*.2)*(.88+rng()*.2),
+      height:3.5*hierarchy,
+      base:central?0:-.08-rank*.14,
+      yaw:direction+(rng()-.5)*.55,
+      seed:(seed+i*1597334677)>>>0,
+    };
+  });
 }
 
 // Indexed chamfered prism: shared rim vertices make each slab a closed surface.

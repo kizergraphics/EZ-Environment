@@ -11,7 +11,7 @@ globalThis.FileReader??=class{
   readAsArrayBuffer(blob){blob.arrayBuffer().then(value=>{this.result=value;this.onloadend?.();},e=>this.onerror?.(e));}
   readAsDataURL(blob){blob.arrayBuffer().then(value=>{this.result=`data:${blob.type};base64,${Buffer.from(value).toString('base64')}`;this.onloadend?.();},e=>this.onerror?.(e));}
 };
-const selected=ASSET_PRESETS.filter(p=>p.definition.seed>=7101&&p.definition.seed<=7114||p.definition.seed>=8101&&p.definition.seed<=8114);
+const selected=ASSET_PRESETS.filter(p=>p.definition.seed>=7101&&p.definition.seed<=7114||p.definition.seed>=7201&&p.definition.seed<=7203||p.definition.seed>=8101&&p.definition.seed<=8114);
 const output=path.resolve('artifacts/catalog/export');await mkdir(output,{recursive:true});
 const registry=new Map(),layers=Object.fromEntries(LAYERS.map(l=>[l,{records:[]}]));
 const ground=new THREE.Mesh(new THREE.PlaneGeometry(64,64).rotateX(-Math.PI/2),new THREE.MeshStandardMaterial({color:'#786b53'}));

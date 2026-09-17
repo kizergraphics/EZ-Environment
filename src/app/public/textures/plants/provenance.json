@@ -4,5 +4,23 @@
     "description": "Single broad leaf interior albedo with central midrib, secondary and reticulate veins, pores and chlorophyll variation. No branch atlas or painted lighting.",
     "processing": "Runtime tint-compatible albedo preserves source contrast. Normal and roughness maps are artistic derivatives of luminance, not measured scan data.",
     "scope": "Generated plant surfaces; existing tree maps remain unchanged."
+  },
+  "leaf-surface-palmate-v1.png": {
+    "source": "Built-in ImageGen, generated for EZ Environment on 2026-09-13",
+    "description": "Palmate leaf interior with five primary veins radiating from the bottom-center attachment and fine reticulate venation.",
+    "processing": "Runtime tint-compatible albedo; normal and roughness maps are artistic luminance derivatives, not measured scan data.",
+    "scope": "Lobed, heart-shaped and trifoliate generated plant leaves."
+  },
+  "leaf-surface-parallel-v1.png": {
+    "source": "Built-in ImageGen, generated for EZ Environment on 2026-09-13",
+    "description": "Narrow leaf interior with a centered midrib and dense upward-sweeping parallel secondary veins.",
+    "processing": "Runtime tint-compatible albedo; normal and roughness maps are artistic luminance derivatives, not measured scan data.",
+    "scope": "Lanceolate, fern pinna and succulent generated plant leaves."
+  },
+  "leaf-surface-needle-v1.png": {
+    "source": "Built-in ImageGen, generated for EZ Environment on 2026-09-13",
+    "description": "Conifer needle epidermis with continuous longitudinal ridges and subtle stomatal rows.",
+    "processing": "Runtime tint-compatible albedo; normal and roughness maps are artistic luminance derivatives, not measured scan data.",
+    "scope": "Conifer needles, grass blades and cushion-scale generated foliage."
   }
 }

@@ -14,7 +14,7 @@ import { addFoliageVariants, selectAssetAppearance } from './biome-species.js';
 import { prepareAssetMaterials } from '../materials/pbr.js';
 import { awaitTextureReadiness } from '../materials/readiness.js';
 import { hash } from './random.js';
-import { ROCK_PRESETS } from '../generators/rocks.js';
+import { ROCK_PRESETS, rockVariantIndex, selectRockVariant } from '../generators/rocks.js';
 
 export class EnvironmentController extends THREE.Group {
   constructor(options = {}) {
@@ -45,7 +45,12 @@ export class EnvironmentController extends THREE.Group {
     this._initializing = (async()=>{
       if(!this.registry.size){
         const registry=await createRegistry(this.options.customSpecies,this.cache);
-        try { for (const asset of registry.values()) await prepareAssetMaterials(asset); }
+        try {
+          for (const asset of registry.values()) {
+            if (asset.variants?.length) for (const variant of asset.variants) await prepareAssetMaterials(variant);
+            else await prepareAssetMaterials(asset);
+          }
+        }
         catch (error) { for (const asset of registry.values()) asset.dispose(); throw error; }
         if(this._disposed){for(const asset of registry.values())asset.dispose();throw new Error('Environment initialization was canceled after disposal.');}
         this.registry=registry;
@@ -133,11 +138,20 @@ export class EnvironmentController extends THREE.Group {
         const densityFactor=['grass','flowers','pebbles'].includes(layer)?(options.composition==='biome'&&layer==='grass'?[1,.8,.55]:[1,.55,.2])[level]:1;
         const count=Math.floor(baseLimit*densityFactor);if(!count)continue;
         const selected=records.slice(0,count),bySpecies=new Map();
-        for(const record of selected){const id=record.species||options.layers[layer].species;if(!bySpecies.has(id))bySpecies.set(id,[]);bySpecies.get(id).push(record);}
-        for(const [id,speciesRecords] of bySpecies){
+        for(const record of selected){
+          const id=record.species||options.layers[layer].species,asset=this.registry.get(id);
+          // Preserve authored silhouette diversity up close, then collapse the
+          // distant LODs back into one instanced draw per species. Splitting all
+          // three variants at every distance makes tiny rocks and pebbles pay
+          // the same draw-call cost as foreground assets.
+          const variant=rockVariantIndex(asset,record.variationSeed,level),key=`${id}\u0000${variant}`;
+          if(!bySpecies.has(key))bySpecies.set(key,{id,variant,records:[]});
+          bySpecies.get(key).records.push(record);
+        }
+        for(const {id,variant,records:speciesRecords} of bySpecies.values()){
         const asset=this.registry.get(id);
         if(!asset)throw new Error(`Unknown species: ${id}`);
-        const selectedAsset=selectAssetAppearance(asset,options);
+        const selectedAsset=selectRockVariant(selectAssetAppearance(asset,options),variant);
         const source=selectedAsset.lods[level]||selectedAsset.object3D, parts=collectMeshes(source);
         const isPlant=['grass','flowers','plants'].includes(layer)&&source.userData.wind!==false;
         for(const part of parts){
@@ -149,7 +163,7 @@ export class EnvironmentController extends THREE.Group {
             this.wind.attach(part.material,windSpec.height,windSpec.amplitude,windSpec.weighted);
           }
           const binding=this.lod.bind(part.material,level,isPlant?this.wind:null,windSpec,castShadow);
-          const mesh=new THREE.InstancedMesh(part.geometry,binding.material,speciesRecords.length);mesh.name=`${layer}_${id}`;
+          const mesh=new THREE.InstancedMesh(part.geometry,binding.material,speciesRecords.length);mesh.name=`${layer}_${id}${asset.variants?.length?`__v${variant+1}`:''}`;
           mesh.receiveShadow=true;mesh.castShadow=castShadow;if(binding.depth)mesh.customDepthMaterial=binding.depth;
           for(let i=0;i<speciesRecords.length;i++){
             const r=speciesRecords[i]; transform.position.fromArray(r.position);transform.scale.fromArray(r.scale);

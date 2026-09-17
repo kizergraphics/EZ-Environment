@@ -20,6 +20,6 @@ test('legacy untagged compaction preserves triangles, world bounds and material 
 
 test('generated PBR plants retain distinct surface slots during compaction',()=>{
   const a=generatePlant(createPlantDefinition('flower'));const b=compactPlant(a);
-  assert.equal(a,b);assert.deepEqual(b.object3D.children.map(o=>o.material.userData.pbrFamily),['stem','foliage','petal','pollen']);
+  assert.equal(a,b);assert.deepEqual(b.object3D.children.map(o=>o.material.userData.pbrFamily),['bark','foliage','petal','pollen']);
   b.dispose();
 });

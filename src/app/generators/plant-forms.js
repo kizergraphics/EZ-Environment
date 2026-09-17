@@ -2,11 +2,11 @@ import * as THREE from 'three';
 
 export const EXTRA_PLANT_FORMS = Object.freeze(['grass', 'coniferSapling', 'cactus', 'succulent', 'cushion', 'deadwood']);
 export const EXTRA_PLANT_DEFAULTS = {
-  grass: { height: .65, width: .65, stemCount: 12, branches: 4, leafSize: .08, density: 1, seedHeads: false, bladeWidth: .025 },
-  coniferSapling: { height: 2.2, width: 1.3, stemCount: 1, branches: 7, leafSize: .075, density: .8, leafColor: '#496845' },
-  cactus: { height: 2.6, width: 1.25, stemCount: 3, branches: 3, leafColor: '#6d7950', stemColor: '#6d7950', armCount: 2 },
-  succulent: { height: .75, width: 1.4, stemCount: 12, branches: 3, leafSize: .4, leafColor: '#77938b' },
-  cushion: { height: .16, width: 1, stemCount: 12, branches: 5, leafSize: .045, density: .9, leafColor: '#64743d' },
+  grass: { height: .65, width: .65, stemCount: 12, branches: 4, leafSize: .08, density: 1, seedHeads: false, bladeWidth: .025, leafDesign: 'grassBlade', barkType: 'Bark013' },
+  coniferSapling: { height: 2.2, width: 1.3, stemCount: 1, branches: 7, leafSize: .075, density: .8, leafColor: '#496845', leafDesign: 'coniferNeedle', barkType: 'Bark003' },
+  cactus: { height: 2.6, width: 1.25, stemCount: 3, branches: 3, leafColor: '#6d7950', stemColor: '#6d7950', armCount: 2, barkType: 'Bark001' },
+  succulent: { height: .75, width: 1.4, stemCount: 12, branches: 3, leafSize: .4, leafColor: '#77938b', leafDesign: 'succulent', barkType: 'Bark004' },
+  cushion: { height: .16, width: 1, stemCount: 12, branches: 5, leafSize: .045, density: .9, leafColor: '#64743d', leafDesign: 'cushionScale', barkType: 'Bark015' },
   deadwood: { height: .65, width: 3.2, stemCount: 1, branches: 3, stemColor: '#a58c70', leafColor: '#67503a' },
 };
 

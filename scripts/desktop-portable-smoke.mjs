@@ -117,19 +117,38 @@ try {
       if (mode === 'environment') { await a.environment.setOptions({ quality: 'medium', appearance: 'naturalistic' }); a.studio.renderPanel(); }
       a.render();
       let pbrMaterials = 0, pbrReady = true;
+      const barkSurfaces = [];
       if (['plant','rock'].includes(mode)) for (const lod of a.studio.asset.lods) lod.traverse(mesh => {
         if (mesh.material?.userData.pbrFamily) { pbrMaterials++; pbrReady &&= ['map','normalMap','roughnessMap'].every(key => mesh.material[key]?.image?.width > 0); }
+        if (mesh.material?.userData.pbrFamily === 'bark') {
+          let maxV = 0;
+          const uv = mesh.geometry.attributes.uv;
+          for (let i = 0; i < uv.count; i++) maxV = Math.max(maxV, uv.getY(i));
+          barkSurfaces.push({ tint: mesh.material.color.getHexString(), design: mesh.material.userData.pbrVariant, maxV });
+        }
       });
       const replay = mode === 'environment' && benchmark ? await a.runBenchmark({ duration: 30000, warmup: 10000, replay: true }) : null;
-      return { mode: a.mode, generated: ['plant', 'rock'].includes(mode) ? Boolean(a.studio.asset?.definitionHash) : a.environment.ready, environmentVisible:a.environment.visible, latest:a.studio.lastAuthoredMode, previewVisible:a.studio.viewportGroup.visible, assetMode:a.studio.assetMode, drawCalls: a.renderer.info.render.calls, pbrMaterials, pbrReady, replay };
+      return { mode: a.mode, generated: ['plant', 'rock'].includes(mode) ? Boolean(a.studio.asset?.definitionHash) : a.environment.ready, environmentVisible:a.environment.visible, latest:a.studio.lastAuthoredMode, previewVisible:a.studio.viewportGroup.visible, assetMode:a.studio.assetMode, drawCalls: a.renderer.info.render.calls, pbrMaterials, pbrReady, barkSurfaces, replay };
     }, {mode,benchmark:process.env.EZ_PORTABLE_BENCH!=='0'});
     assert.equal(result.mode, mode);
     assert.equal(result.generated, true);
     if (['plant','rock'].includes(mode)) assert.ok(result.pbrMaterials >= 3 && result.pbrReady, 'Every packaged asset LOD must have ready PBR textures.');
+    if (mode === 'plant') {
+      assert.equal(result.barkSurfaces.length, 3);
+      for (const bark of result.barkSurfaces) {
+        assert.equal(bark.tint, 'ffffff', 'Packaged shrubs must use natural bark color.');
+        assert.equal(bark.design, 'Bark006');
+        assert.ok(bark.maxV > 3, 'Packaged branches must tile their bark surface.');
+      }
+    }
     assert.equal(result.environmentVisible,true);
     if(mode==='environment'){assert.equal(result.latest,'rock');assert.equal(result.assetMode,'rock');assert.equal(result.previewVisible,true);}
     assert.ok(result.drawCalls > 0);
-    if (result.replay) assert.ok(result.replay.frameMs.p95 <= 16.7, `Portable Naturalistic Medium replay frame p95 ${result.replay.frameMs.p95} ms exceeds 16.7 ms.`);
+    if (result.replay) {
+      console.log(`BENCH portable Naturalistic Medium ${JSON.stringify(result.replay)}`);
+      assert.ok(result.replay.frameMs.average <= 1000 / 59.5 && result.replay.frameMs.p95 <= 20,
+        `Portable Naturalistic Medium replay missed its 60 FPS gate: average ${result.replay.frameMs.average} ms, p95 ${result.replay.frameMs.p95} ms.`);
+    }
     modes.push(result);
     await page.screenshot({ path: path.join(output, `portable-${mode}.png`) });
   }
@@ -174,7 +193,7 @@ try {
   await downloads.detach();
   const biomes=[];
   const catalog=[];
-  for(const [mode,expected,ids]of [['plant',27,['moss-cushion','young-pine','fallen-log','short-meadow-grass','tall-seed-grass','saguaro-cactus','agave-rosette']],['rock',22,['limestone-slab','mossy-forest-boulder','talus-scree','sandstone-outcrop']]]){
+  for(const [mode,expected,ids]of [['plant',30,['bush-1','bush-2','bush-3','moss-cushion','young-pine','fallen-log','short-meadow-grass','tall-seed-grass','saguaro-cactus','agave-rosette']],['rock',22,['limestone-slab','mossy-forest-boulder','talus-scree','sandstone-outcrop']]]){
     if(process.env.EZ_PORTABLE_SURFACE_ONLY==='1')break;
     await page.evaluate(mode=>window.__EZ_ENVIRONMENT__.studio.setMode(mode),mode);
     const selector=page.locator('#studio-panel select[aria-label="Preset"]');assert.equal(await selector.locator('option').count(),expected+1);

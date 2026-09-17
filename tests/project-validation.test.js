@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { Tree,TreePreset } from '../build/ez-tree.es.js';
 import { validateTreeProject } from '../src/app/studio/project-validation.js';
-import { BarkType, LeafType } from '../src/app/textures.js';
+import { APP_TREE_PRESET_NAMES, BarkType, LeafType } from '../src/app/textures.js';
 
 function dispose(tree){const geometries=new Set(),materials=new Set();tree.traverse(o=>{if(o.geometry)geometries.add(o.geometry);if(o.material)materials.add(o.material);});geometries.forEach(g=>g.dispose());materials.forEach(m=>m.dispose());}
 function defaults(){const tree=new Tree(),result=JSON.parse(JSON.stringify(tree.options));delete result.bark.maps;delete result.leaves.map;dispose(tree);return result;}
@@ -23,6 +23,14 @@ test('all 16 bundled presets validate and generate finite real Tree geometry wit
     try{tree.options.copy(validated);assert.doesNotThrow(()=>tree.generate(),name);finiteGeometry(tree);}finally{dispose(tree);}
     assert.equal(JSON.stringify(preset),before,name);assert.equal(JSON.stringify(baseline),beforeDefaults);
   }
+});
+
+test('legacy bush presets stay loadable through the library but are hidden from the Tree editor',()=>{
+  for(const name of ['Bush 1','Bush 2','Bush 3']){
+    assert.ok(TreePreset[name],`${name} remains a public compatibility preset`);
+    assert.ok(!APP_TREE_PRESET_NAMES.includes(name),`${name} is presented in Plant Studio instead`);
+  }
+  assert.ok(APP_TREE_PRESET_NAMES.includes('Ash Medium'));
 });
 
 test('invalid branch and leaf starts are rejected before the generator can index outside its sections',()=>{

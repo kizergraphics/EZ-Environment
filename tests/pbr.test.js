@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { SRGBColorSpace, NoColorSpace, ObjectLoader, Mesh, PlaneGeometry, MeshStandardMaterial } from 'three';
 import { generatePlant, createPlantDefinition } from '../src/app/generators/plants.js';
-import { getBotanicalMaps, prepareAssetMaterials, assertPbrReady } from '../src/app/materials/pbr.js';
+import { getBotanicalMaps, loadPbrFamily, prepareAssetMaterials, assertPbrReady } from '../src/app/materials/pbr.js';
 
 test('botanical PBR preparation supplies valid maps across LODs, retains colors, and owns clones', async()=>{
   const asset=generatePlant(createPlantDefinition('flower'));
@@ -35,9 +35,10 @@ test('finished surface validation catches untagged mapless materials and missing
   mesh.geometry.dispose();mesh.material.dispose();
 });
 
-test('material descriptors survive validation and reject unknown families',()=>{
+test('material descriptors survive validation and reject unknown families',async()=>{
   assert.equal(createPlantDefinition('shrub').stemMaterial,'bark');
   assert.throws(()=>createPlantDefinition('flower',{leafMaterial:'missing'}),/Unknown plant/);
+  await assert.rejects(loadPbrFamily('bark',{variant:'Bark999'}),/Unknown bark texture/);
 });
 
 test('worker LODs sharing serialized metadata each receive their own ready material maps',async()=>{

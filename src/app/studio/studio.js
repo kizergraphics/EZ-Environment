@@ -1,6 +1,6 @@
 import * as THREE from 'three';
-import { PLANT_PRESETS, PLANT_ARCHETYPES, createPlantDefinition } from '../generators/plants.js';
-import { ROCK_PRESETS, ROCK_ARCHETYPES, createRockDefinition } from '../generators/rocks.js';
+import { PLANT_PRESETS, PLANT_ARCHETYPES, LEAF_DESIGNS, PLANT_BARK_TYPES, createPlantDefinition } from '../generators/plants.js';
+import { ROCK_PRESETS, ROCK_ARCHETYPES, ROCK_SHAPE_PROFILES, createRockDefinition } from '../generators/rocks.js';
 import { PRESET_GROUPS, assetLayer, layerSpecies } from '../generators/catalog.js';
 import { GenerationClient } from './generation.js';
 import { WindController } from '../environment/wind.js';
@@ -207,7 +207,7 @@ export class Studio {
   }
   snapshot(mode=this.mode){return mode==='environment'?{mode,options:structuredClone(this.environment.options)}:{mode,definition:structuredClone(this.definitions[mode])};}
   remember(snapshot=this.snapshot()){this.history.push(snapshot);if(this.history.length>60)this.history.shift();this.future=[];this.updateViewportToolbar();}
-  change(key,value){this.remember();this.definitions[this.mode][key]=value;const preset=this.panel.querySelector('select[aria-label="Preset"]');if(preset)preset.value='';clearTimeout(this.debounce);this.debounce=setTimeout(()=>this.generate().catch(e=>this.status(e.message,true)),100);}
+  change(key,value){this.remember();this.definitions[this.mode][key]=value;if(this.mode==='rock'&&key==='shapeProfile')this.definitions.rock.version=2;const preset=this.panel.querySelector('select[aria-label="Preset"]');if(preset)preset.value='';clearTimeout(this.debounce);this.debounce=setTimeout(()=>this.generate().catch(e=>this.status(e.message,true)),100);}
   async restoreSnapshot(snapshot){
     if(snapshot.mode==='environment'){await this.environment.setOptions(snapshot.options);this.syncPreview();this.syncSceneAppearance?.();}
     else this.definitions[snapshot.mode]=structuredClone(snapshot.definition);
@@ -255,15 +255,17 @@ export class Studio {
       if(['shrub','bush','sapling'].includes(d.archetype))add('asymmetry','Asymmetry',0,1,.05);
       if(d.archetype!=='fern')form.body.append(field('Flowering',d.flowering,0,1,1,v=>{this.change('flowering',v);this.renderPanel();},'checkbox'));
       if(d.flowering){if(d.archetype==='flower')add('flowerCount','Flower heads',1,16,1);add('petalCount','Petals',4,16,1);}
-      if(d.archetype==='groundCover')form.body.append(select('Leaf shape',[['lance','Lance'],['clover','Three leaflets']],d.leafShape??'lance',v=>this.change('leafShape',v)));
       }
+      if(!['cactus','deadwood'].includes(d.archetype))form.body.append(select('Leaf design',LEAF_DESIGNS.map(value=>[value,title(value)]),d.leafDesign,v=>this.change('leafDesign',v)));
     }else{
       add('depth','Depth · m',.01,50,.05);if(!['slab','outcrop'].includes(d.archetype)){for(const k of ['roundness','angularity','asymmetry','flattening','displacement'])add(k,title(k),0,1,.05);add('frequency','Surface frequency',.1,10,.1);}
+      form.body.append(select('Shape profile',ROCK_SHAPE_PROFILES.map(value=>[value,value.replace(/([a-z])([A-Z])/g,'$1 $2').replace(/^./,c=>c.toUpperCase())]),d.shapeProfile??({pebble:'rounded',rock:'fieldstone',boulder:'irregularBoulder',cluster:'fieldstone',slab:'ledgestone',outcrop:'ledgestone'})[d.archetype],v=>this.change('shapeProfile',v)));
       if(d.archetype==='cluster'){form.body.append(select('Cluster mix',[['pebbles','Pebble patch'],['mixed','Mixed stones'],['outcrop','Boulder outcrop'],['scree','Talus scree']],d.clusterMix,v=>this.change('clusterMix',v)));add('count','Members',1,128,1);add('radius','Cluster radius · m',.1,40,.1);add('spacing','Member spacing · m',0,5,.05);}
       form.body.append(select('Collider',['none','box','sphere','convex'].map(t=>[t,title(t)]),d.colliderMode,v=>this.change('colliderMode',v)));
     }
     const surface=section('Surface');body.append(surface.element);
-    for(const key of mode==='plant'?['stemColor','leafColor',...(d.flowering||d.seedHeads?['flowerColor']:[])]:['color'])surface.body.append(field(title(key),d[key],0,0,0,v=>this.change(key,v),'color'));
+    for(const key of mode==='plant'?['stemColor','leafColor',...(d.flowering||d.seedHeads?['flowerColor']:[])]:['color'])surface.body.append(field(key==='stemColor'&&d.stemMaterial==='bark'&&d.archetype!=='deadwood'?'Bark tint':title(key),d[key],0,0,0,v=>this.change(key,v),'color'));
+    if(mode==='plant'&&d.stemMaterial==='bark'&&d.archetype!=='deadwood')surface.body.append(select('Bark design',PLANT_BARK_TYPES.map(value=>[value,value.replace('Bark','Bark ')]),d.barkType,v=>this.change('barkType',v)));
     if(mode==='rock'){
       for(const [key,label]of [['strata','Strata'],['weatheringAmount','Moss / lichen coverage']])surface.body.append(field(label,d[key]??0,0,1,.05,v=>this.change(key,v)));
       surface.body.append(field('Weathering color',d.weatheringColor??'#657443',0,0,0,v=>this.change('weatheringColor',v),'color'));

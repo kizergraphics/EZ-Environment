@@ -27,6 +27,13 @@ export const LeafType = {
   Pine: 'pine',
 };
 
+// Bush 1-3 remain public TreePreset entries for library/backward compatibility,
+// but the desktop app presents their Plant-native replacements instead.
+const PLANT_NATIVE_TREE_PRESETS = new Set(['Bush 1', 'Bush 2', 'Bush 3']);
+export const APP_TREE_PRESET_NAMES = Object.freeze(
+  Object.keys(TreePreset).filter(name => !PLANT_NATIVE_TREE_PRESETS.has(name)),
+);
+
 const textureLoader = new THREE.TextureLoader();
 const barkCache = new Map();
 const leafCache = new Map();

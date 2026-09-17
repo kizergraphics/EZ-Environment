@@ -1,25 +1,67 @@
 # EZ Environment
 
-EZ Environment is a local plant, rock, and procedural environment studio with a portable Windows desktop build. Start with [the user guide](docs/USER_GUIDE.md), [the biome and viewport upgrade](docs/BIOME_UPGRADE.md), [milestones](ROADMAP.md), [release notes](docs/RELEASE_NOTES.md), [desktop build instructions](docs/desktop.md), and [Unity handoff](unity/README.md).
+> **This project is built on [EZ-Tree](https://github.com/dgreenheck/ez-tree) by [Daniel Greenheck](https://github.com/dgreenheck).**
+> EZ-Tree is the MIT-licensed procedural tree generator that powers all tree generation in this app. EZ Environment extends it into a full standalone authoring studio for plants, rocks, and whole environments. The original copyright and license notice are preserved in [LICENSE](LICENSE) — huge thanks to Daniel for the foundation.
 
-The project builds on the MIT-licensed [EZ-Tree](https://github.com/dgreenheck/ez-tree) library. Its original copyright and license notice are preserved in [LICENSE](LICENSE).
+EZ Environment is a local, offline-first procedural authoring studio for Windows: shape trees, plants, and rocks, scatter them across biome-driven terrain, and export textured game-ready assets — all in a portable desktop app.
 
-Generated assets receive PBR color, normal, and roughness textures automatically, including all LODs and saved custom species. GLBs embed their textures; ZIP packs also include reusable texture files, source records and a material catalog. The Unity importer creates assigned editable materials shared across LODs and instances. The same surface materials appear in the viewport. Export controls default to a 2048 px cap without upscaling. Terrain blends use four bounded color/roughness tiles with repeating detailed normals. See [material sources](src/app/materials/README.md) for texture provenance and [Unity import](unity/README.md) for receiving-renderer setup.
+## Download
+
+Grab the latest portable build from the **[Releases](https://github.com/kizergraphics/EZ-Environment/releases)** page — a single `.exe`, no install required.
+
+## Screenshots
 
 <p align="center">
-<img src="https://github.com/user-attachments/assets/cb5f5edd-3e1b-453d-925f-734965126b17">
+<img src="https://github.com/kizergraphics/EZ-Environment/releases/download/v1.2.0/ez-environment-forest.png" alt="Forest biome overview">
 </p>
 
-# Upstream EZ-Tree
-EZ-Tree is a procedural tree generator with dozens of tunable parameters. The standalone tree generation code is published as a library and can be imported into your own application for dynamically generating trees on demand. Additionally, there is a standalone web app which allows you to create trees within the browser and export as .PNG or .GLB files.
+| | |
+|---|---|
+| ![Plant Studio](https://github.com/kizergraphics/EZ-Environment/releases/download/v1.2.0/ez-environment-plant-studio.png) | ![Bark closeup](https://github.com/kizergraphics/EZ-Environment/releases/download/v1.2.0/ez-environment-bark-closeup.png) |
+| ![Desert biome](https://github.com/kizergraphics/EZ-Environment/releases/download/v1.2.0/ez-environment-desert.png) | ![Rocky biome](https://github.com/kizergraphics/EZ-Environment/releases/download/v1.2.0/ez-environment-rocky.png) |
+| ![Tree editor](https://github.com/kizergraphics/EZ-Environment/releases/download/v1.2.0/ez-environment-tree-editor.png) | ![Rock studio](https://github.com/kizergraphics/EZ-Environment/releases/download/v1.2.0/ez-environment-rock-studio.png) |
 
-# Installation
+## Features
 
-```js
-npm i @dgreenheck/ez-tree
+- **Four authoring modes** — dedicated studios for trees, plants, rocks, and full environments, each with live preview and preset libraries.
+- **Biome environments** — meadow, forest, desert, and rocky biomes scatter authored species over procedural terrain with ground-level and overview camera bookmarks.
+- **Photographed bark everywhere** — every stem-bearing plant archetype (shrubs, ferns, weeds, ground cover, flowers, cacti, saplings, and more) renders with real PBR bark textures, selectable per-plant from 11 bark designs with tint control.
+- **Automatic PBR exports** — generated assets receive color, normal, and roughness textures on every LOD, including saved custom species. GLBs embed their textures; ZIP packs also include reusable texture files, source records, and a material catalog.
+- **Unity handoff** — the included importer creates assigned, editable materials shared across LODs and instances. See [Unity import](unity/README.md).
+- **PNG capture** — export viewport, 1080p, or 4K renders straight from the app.
+- **Projects** — save and reload full studio projects; older saves migrate automatically.
+
+See [the user guide](docs/USER_GUIDE.md), [milestones](ROADMAP.md), [release notes](docs/RELEASE_NOTES.md), [desktop build instructions](docs/desktop.md), and [material sources](src/app/materials/README.md) for texture provenance.
+
+## Run from source
+
+```bash
+npm install
+npm run app        # build the library + launch the dev server
 ```
 
-# Usage
+Portable desktop build:
+
+```bash
+npm run desktop:pack   # outputs release/EZ-Environment-<version>-Portable.exe
+```
+
+Tests:
+
+```bash
+node --test tests/*.test.js
+npm run test:desktop
+```
+
+---
+
+# The EZ-Tree library
+
+Underneath the studio sits the standalone EZ-Tree generation library, usable in your own Three.js app:
+
+```bash
+npm i @dgreenheck/ez-tree
+```
 
 ```js
 // Create new instance
@@ -71,32 +113,16 @@ All LOD levels share one bark material and one leaf material, so `tree.update(ti
 
 If you have your own LOD or instancing system, `tree.createGeometry(detail)` returns raw `{ branches, leaves }` `BufferGeometry` pairs at any detail level without touching the tree's own meshes.
 
-# Running Standalone App Locally
-
-To run the standalone app locally, you first need to build the EZ-Tree library before running the app.
-
-```bash
-npm install
-npm run app
-```
-
-# Running App with Docker
-
-```bash
-docker compose build
-docker compose up -d
-```
-
-# Tree Parameters
+## Tree Parameters
 
 The `TreeOptions` class defines an options object that controls various parameters of a procedurally generated tree. Each property of this object allows for customization of the tree's appearance, including bark, branches, and leaves. Below is a detailed explanation of each property of the `TreeOptions` object.
 
-## General Properties
+### General Properties
 
 - **`seed`**: Sets the initial value for random generation, ensuring consistent tree generation when using the same seed.
 - **`type`**: Defines the type of the tree, which can be set to one of the options from the `TreeType` enumeration (e.g., `TreeType.Deciduous`).
 
-## Bark Parameters
+### Bark Parameters
 
 The `bark` object controls the appearance and properties of the tree trunk.
 
@@ -106,7 +132,7 @@ The `bark` object controls the appearance and properties of the tree trunk.
 - **`textured`**: Boolean value that indicates if a texture is applied to the bark (`true` or `false`).
 - **`textureScale`**: Controls the scale of the bark texture in both the `x` and `y` axes. It is an object with properties `x` and `y` to define the scaling factors.
 
-## Branch Parameters
+### Branch Parameters
 
 The `branch` object defines parameters for the trunk and branch levels of the tree.
 
@@ -123,7 +149,7 @@ The `branch` object defines parameters for the trunk and branch levels of the tr
 - **`taper`**: Controls the tapering of the branches at each level. A value between `0` and `1` defines the reduction in radius from base to tip.
 - **`twist`**: Defines the amount of twisting applied to each branch level.
 
-## Leaf Parameters
+### Leaf Parameters
 
 The `leaves` object defines properties that control the appearance and placement of leaves.
 
@@ -136,4 +162,3 @@ The `leaves` object defines properties that control the appearance and placement
 - **`sizeVariance`**: Specifies how much variance in size each leaf instance should have, making the leaves look more natural.
 - **`tint`**: Tint color applied to the leaves, defined as a hexadecimal color value (e.g., `0xffffff` for white).
 - **`alphaTest`**: Sets the alpha threshold for leaf transparency, controlling the transparency of the leaf textures.
-

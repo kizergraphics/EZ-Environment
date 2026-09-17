@@ -9,8 +9,11 @@ import { BIOMES, applyBiome } from '../src/app/environment/biomes.js';
 import { validateOptions } from '../src/app/environment/options.js';
 
 test('catalog IDs, layers and biome mixtures resolve to regenerable built-ins',async()=>{
-  assert.equal(PLANT_PRESETS.length,27);assert.equal(ROCK_PRESETS.length,22);
-  assert.equal(new Set(ASSET_PRESETS.map(p=>p.id)).size,49);
+  assert.equal(PLANT_PRESETS.length,30);assert.equal(ROCK_PRESETS.length,22);
+  assert.equal(new Set(ASSET_PRESETS.map(p=>p.id)).size,52);
+  for(const [id,archetype]of [['bush-1','shrub'],['bush-2','bush'],['bush-3','bush']]){
+    const preset=PLANT_PRESETS.find(p=>p.id===id);assert.equal(preset?.definition.archetype,archetype);assert.equal(preset.group,'Forest');
+  }
   const registry=await createRegistry([],null,false);
   try{
     for(const p of ASSET_PRESETS){assert.equal(assetLayer(p.definition),p.layer);assert.ok(registry.has(p.id));assert.ok(layerSpecies(p.layer).some(s=>s.id===p.id));assert.deepEqual(registry.get(p.id).definition,p.definition);}

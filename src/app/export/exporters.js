@@ -5,6 +5,7 @@ import { hash as hashData } from '../environment/random.js';
 import { createExportSnapshot } from './snapshot.js';
 import { appendMaterialCatalog, validateMaterialCatalog } from './material-catalog.js';
 import { selectAssetAppearance } from '../environment/biome-species.js';
+import { selectRockVariant } from '../generators/rocks.js';
 import { awaitTextureReadiness } from '../materials/readiness.js';
 import { prepareAssetMaterials, assertPbrReady } from '../materials/pbr.js';
 import {
@@ -226,7 +227,29 @@ function assetDescriptor(id, asset, prefix = `assets/${id}/`) {
   };
 }
 
-function chunkData(key, chunk) {
+function exportedAsset(record, registry) {
+  const id = record.species;
+  const asset = registry.get(id);
+  if (!asset) throw new Error(`Placement references missing species: ${id}`);
+  const selected = selectRockVariant(asset, record.variationSeed ?? 0);
+  return {
+    id: selected === asset ? id : `${id}__v${selected.variantIndex + 1}`,
+    asset: selected,
+  };
+}
+
+function environmentAssetSources(environment) {
+  const sources = new Map();
+  for (const chunk of environment.placement.chunks.values())
+    for (const layer of Object.values(chunk.layers))
+      for (const record of layer.records) {
+        const selected = exportedAsset(record, environment.registry);
+        sources.set(selected.id, selected.asset);
+      }
+  return sources;
+}
+
+function chunkData(key, chunk, registry) {
   return {
     version: 1,
     id: key,
@@ -237,7 +260,7 @@ function chunkData(key, chunk) {
       .map((name) => ({
         name,
         instances: chunk.layers[name].records.map((record) => ({
-          asset: record.species,
+          asset: exportedAsset(record, registry).id,
           ...placementTransform(record),
           tint: record.tint ?? 1,
           variationSeed: record.variationSeed ?? 0,
@@ -256,13 +279,9 @@ export function createEnvironmentManifest(environment) {
   const chunks = [...environment.placement.chunks.entries()].sort(([a], [b]) =>
     a.localeCompare(b),
   );
-  const used = new Set();
-  for (const [, chunk] of chunks)
-    for (const layer of Object.values(chunk.layers))
-      for (const record of layer.records) used.add(record.species);
-  const assets = [...used].sort().map((id) => {
-    const asset = environment.registry.get(id);
-    if (!asset) throw new Error(`Placement references missing species: ${id}`);
+  const sources = environmentAssetSources(environment);
+  const assets = [...sources.keys()].sort().map((id) => {
+    const asset = sources.get(id);
     return assetDescriptor(id, selectAssetAppearance(asset, environment.options));
   });
   const staticObjects = [];
@@ -616,13 +635,14 @@ export async function exportEnvironmentPack(environment, options = {}) {
   if (environment.loading)
     throw new Error('Wait for environment generation before exporting.');
   const manifest = createEnvironmentManifest(environment);
+  const exportSources = environmentAssetSources(environment);
   manifest.exportSettings = { maxTextureSize: options.maxTextureSize };
   const files = {};
   // Snapshot placements before asynchronous GLB work so UI edits cannot mix generations.
   for (const chunk of manifest.chunks)
     files[chunk.file] = strToU8(
       JSON.stringify(
-        chunkData(chunk.id, environment.placement.chunks.get(chunk.id)),
+        chunkData(chunk.id, environment.placement.chunks.get(chunk.id), environment.registry),
       ),
     );
   const snapshot = createExportSnapshot();
@@ -632,7 +652,7 @@ export async function exportEnvironmentPack(environment, options = {}) {
     const sources = new Map(
       manifest.assets.map((descriptor) => [
         descriptor.id,
-        snapshot.asset(selectAssetAppearance(environment.registry.get(descriptor.id), environment.options)),
+        snapshot.asset(selectAssetAppearance(exportSources.get(descriptor.id), environment.options)),
       ]),
     );
     const staticSources = new Map(

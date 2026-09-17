@@ -3,17 +3,19 @@ import { EXTRA_PLANT_FORMS, EXTRA_PLANT_DEFAULTS, buildPlantForm } from './plant
 
 /** Original botanical meshes with serializable PBR material descriptors. No DOM, renderer, or source assets required. */
 export const PLANT_ARCHETYPES = Object.freeze(['shrub', 'bush', 'sapling', 'fern', 'weed', 'groundCover', 'flower', ...EXTRA_PLANT_FORMS]);
+export const LEAF_DESIGNS = Object.freeze(['oval', 'serrated', 'lobed', 'heart', 'lanceolate', 'trifoliate', 'fernPinna', 'coniferNeedle', 'cushionScale', 'grassBlade', 'succulent']);
+export const PLANT_BARK_TYPES = Object.freeze(['Bark001', 'Bark002', 'Bark003', 'Bark004', 'Bark006', 'Bark007', 'Bark008', 'Bark012', 'Bark013', 'Bark014', 'Bark015']);
 const TAU = Math.PI * 2;
 const GOLDEN_ANGLE = 2.399963229728653;
 const V = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
 const defaults = {
-  shrub: { height: 1.35, width: 1.55, branches: 9, stemCount: 5, leafSize: .115, density: 1.25, leafColor: '#587939' },
-  bush: { height: .9, width: 1.9, branches: 11, stemCount: 7, leafSize: .14, density: 1.15, leafColor: '#758c46' },
-  sapling: { height: 2.4, width: 1.25, branches: 10, stemCount: 1, leafSize: .14, density: 1, leafColor: '#7b9644' },
-  fern: { height: .8, width: 1.25, branches: 10, stemCount: 10, leafSize: .1, density: 1.15, leafColor: '#548147' },
-  weed: { height: .7, width: .55, branches: 7, stemCount: 5, leafSize: .12, density: 1, leafColor: '#859052' },
-  groundCover: { height: .24, width: 1.15, branches: 8, stemCount: 12, leafSize: .16, density: 1.2, leafColor: '#6a8544' },
-  flower: { height: .7, width: .7, branches: 5, stemCount: 5, leafSize: .12, density: 1, leafColor: '#698646' },
+  shrub: { height: 1.35, width: 1.55, branches: 9, stemCount: 5, leafSize: .115, density: 1.25, leafColor: '#587939', leafDesign: 'lobed', barkType: 'Bark006' },
+  bush: { height: .9, width: 1.9, branches: 11, stemCount: 7, leafSize: .14, density: 1.15, leafColor: '#758c46', leafDesign: 'serrated', barkType: 'Bark008' },
+  sapling: { height: 2.4, width: 1.25, branches: 10, stemCount: 1, leafSize: .14, density: 1, leafColor: '#7b9644', leafDesign: 'heart', barkType: 'Bark002' },
+  fern: { height: .8, width: 1.25, branches: 10, stemCount: 10, leafSize: .1, density: 1.15, leafColor: '#548147', leafDesign: 'fernPinna', barkType: 'Bark012' },
+  weed: { height: .7, width: .55, branches: 7, stemCount: 5, leafSize: .12, density: 1, leafColor: '#859052', leafDesign: 'lanceolate', barkType: 'Bark014' },
+  groundCover: { height: .24, width: 1.15, branches: 8, stemCount: 12, leafSize: .16, density: 1.2, leafColor: '#6a8544', leafDesign: 'oval', barkType: 'Bark007' },
+  flower: { height: .7, width: .7, branches: 5, stemCount: 5, leafSize: .12, density: 1, leafColor: '#698646', leafDesign: 'lanceolate', barkType: 'Bark002' },
 };
 
 function rng(seed) {
@@ -45,20 +47,26 @@ export function createPlantDefinition(archetype = 'shrub', overrides = {}) {
   const d = {
     version: 1, seed: 18427, archetype, height: 1, width: 1, density: 1,
     branches: 8, stemCount: 5, leafSize: .12, curvature: .65, asymmetry: .35,
-    stemColor: '#705b3d', leafColor: '#698446', flowerColor: '#e7bf66',
+    stemColor: '#ffffff', leafColor: '#698446', flowerColor: '#e7bf66', leafDesign: 'oval', barkType: 'Bark004',
     flowerCount: 5, petalCount: 9, flowering: archetype === 'flower',
     ...defaults[archetype], ...EXTRA_PLANT_DEFAULTS[archetype], ...overrides, archetype,
   };
+  const legacyLeafDesign = d.leafShape === 'clover' ? 'trifoliate' : d.leafShape === 'lance' ? 'lanceolate' : undefined;
+  const leafDesign = overrides.leafDesign === undefined && legacyLeafDesign ? legacyLeafDesign : d.leafDesign;
+  if (!LEAF_DESIGNS.includes(leafDesign)) throw new TypeError(`Unknown plant leafDesign: ${leafDesign}`);
+  if (!PLANT_BARK_TYPES.includes(d.barkType)) throw new TypeError(`Unknown plant barkType: ${d.barkType}`);
   const result = {
     version: 1, seed: numeric(d.seed, 'seed', -2147483648, 4294967295, true) >>> 0, archetype,
     height: numeric(d.height, 'height', .05, 8), width: numeric(d.width, 'width', .05, 8),
     density: numeric(d.density, 'density', .1, 2.5), branches: numeric(d.branches, 'branches', 1, 20, true),
     stemCount: numeric(d.stemCount, 'stemCount', 1, 16, true), leafSize: numeric(d.leafSize, 'leafSize', .015, .7),
     curvature: numeric(d.curvature, 'curvature', 0, 2), asymmetry: numeric(d.asymmetry, 'asymmetry', 0, 1),
-    stemColor: color(d.stemColor, 'stemColor'), leafColor: color(d.leafColor, 'leafColor'), flowerColor: color(d.flowerColor, 'flowerColor'),
+    // The pre-bark placeholder stem ('stem' + #705b3d) upgrades to photographed
+    // bark; other authored stem colors stay on as the bark tint.
+    stemColor: color(d.stemMaterial === 'stem' && d.stemColor === '#705b3d' ? '#ffffff' : d.stemColor, 'stemColor'), leafColor: color(d.leafColor, 'leafColor'), flowerColor: color(d.flowerColor, 'flowerColor'),
     flowerCount: numeric(d.flowerCount, 'flowerCount', 1, 16, true), petalCount: numeric(d.petalCount, 'petalCount', 4, 16, true),
-    flowering: Boolean(d.flowering),
-    stemMaterial: d.stemMaterial ?? (['shrub','bush','sapling','deadwood','coniferSapling'].includes(archetype) ? 'bark' : 'stem'),
+    flowering: Boolean(d.flowering), leafDesign, barkType: d.barkType,
+    stemMaterial: d.stemMaterial === 'stem' ? 'bark' : (d.stemMaterial ?? 'bark'),
     leafMaterial: d.leafMaterial ?? 'foliage', petalMaterial: d.petalMaterial ?? 'petal',
     textureScale: numeric(d.textureScale ?? 1, 'textureScale', .05, 20),
   };
@@ -68,10 +76,10 @@ export function createPlantDefinition(archetype = 'shrub', overrides = {}) {
     result.seedHeads=d.seedHeads;result.bladeWidth=numeric(d.bladeWidth,'bladeWidth',.005,.12);
   }
   if(archetype==='cactus')result.armCount=numeric(d.armCount,'armCount',0,6,true);
-  if(d.leafShape!==undefined){if(!['lance','clover'].includes(d.leafShape))throw new TypeError('Unknown plant leafShape.');result.leafShape=d.leafShape;}
+  if(d.leafShape!==undefined&&!['lance','clover'].includes(d.leafShape))throw new TypeError('Unknown plant leafShape.');
   // Preserve extension metadata through JSON round trips without making it executable.
   for (const key of Object.keys(overrides).sort()) {
-    if (!(key in result) && key !== '__proto__' && key !== 'constructor' && key !== 'prototype') {
+    if (!(key in result) && key !== 'leafShape' && key !== '__proto__' && key !== 'constructor' && key !== 'prototype') {
       const extra = overrides[key];
       if (extra === null || ['string', 'boolean'].includes(typeof extra) || typeof extra === 'number' && Number.isFinite(extra)) result[key] = extra;
     }
@@ -86,35 +94,38 @@ function hashDefinition(definition) {
 }
 
 const presets = [
-  ['woodland-shrub', 'Woodland shrub', 'shrub', {}],
-  ['boxwood', 'Dense boxwood', 'shrub', { height: .95, width: 1.3, leafSize: .075, density: 1.8, stemCount: 7, leafColor: '#496638', seed: 410 }],
-  ['meadow-bush', 'Spreading meadow bush', 'bush', {}],
-  ['copper-bush', 'Copperleaf bush', 'bush', { leafColor: '#a76c43', height: 1.2, width: 1.8, seed: 442 }],
-  ['young-birch', 'Young woodland sapling', 'sapling', { stemColor: '#999482', seed: 925 }],
+  ['woodland-shrub', 'Woodland shrub', 'shrub', { leafDesign: 'lobed', barkType: 'Bark006' }],
+  ['boxwood', 'Dense boxwood', 'shrub', { height: .95, width: 1.3, leafSize: .075, density: 1.8, stemCount: 7, leafColor: '#496638', leafDesign: 'oval', barkType: 'Bark008', seed: 410 }],
+  ['meadow-bush', 'Spreading meadow bush', 'bush', { leafDesign: 'serrated', barkType: 'Bark012' }],
+  ['copper-bush', 'Copperleaf bush', 'bush', { leafColor: '#a76c43', leafDesign: 'heart', barkType: 'Bark015', height: 1.2, width: 1.8, seed: 442 }],
+  ['young-birch', 'Young woodland sapling', 'sapling', { leafDesign: 'heart', barkType: 'Bark002', seed: 925 }],
+  ['bush-1', 'Bush 1', 'shrub', { seed: 7201, height: 1.25, width: 1.55, branches: 8, stemCount: 6, density: 1.35, leafSize: .1, leafDesign: 'serrated', barkType: 'Bark001', leafColor: '#54743d' }],
+  ['bush-2', 'Bush 2', 'bush', { seed: 7202, height: 1.05, width: 2.05, branches: 10, stemCount: 7, density: 1.2, leafSize: .13, leafDesign: 'heart', barkType: 'Bark013', leafColor: '#718849' }],
+  ['bush-3', 'Bush 3', 'bush', { seed: 7203, height: 1.35, width: 1.8, branches: 10, stemCount: 7, density: 1.35, leafSize: .065, leafDesign: 'coniferNeedle', barkType: 'Bark003', leafColor: '#3f6444' }],
   ['forest-fern', 'Forest fern', 'fern', {}],
-  ['bracken', 'Tall bracken', 'fern', { height: 1.05, width: 1.55, stemCount: 7, leafColor: '#829645', curvature: 1.15, seed: 518 }],
-  ['wild-weed', 'Wild meadow weed', 'weed', { flowering: true, flowerColor: '#cbb994' }],
-  ['rosette-carpet', 'Rosette ground cover', 'groundCover', {}],
-  ['silver-groundcover', 'Silver ground cover', 'groundCover', { leafColor: '#98a595', height: .16, width: .95, seed: 221 }],
-  ['golden-daisy', 'Golden field daisies', 'flower', {}],
-  ['white-daisy', 'White meadow daisies', 'flower', { flowerColor: '#f0ead8', petalCount: 12, height: .65, seed: 337 }],
-  ['purple-wildflower', 'Purple wildflowers', 'flower', { flowerColor: '#9c7bb5', petalCount: 6, leafColor: '#6b8567', seed: 135 }],
-  ['berry-thicket', 'Berry Thicket', 'bush', {seed:7101,height:1.1,width:1.9,branches:5,stemCount:4,density:.65,leafSize:.1,flowering:true,flowerColor:'#ead9d4',petalCount:5}],
-  ['wood-sorrel', 'Wood Sorrel Carpet', 'groundCover', {seed:7102,height:.18,width:.85,stemCount:8,branches:3,density:.6,leafSize:.12,leafShape:'clover',flowering:true,flowerColor:'#f1e9d8'}],
+  ['bracken', 'Tall bracken', 'fern', { height: 1.05, width: 1.55, stemCount: 7, leafColor: '#829645', curvature: 1.15, seed: 518, barkType: 'Bark013' }],
+  ['wild-weed', 'Wild meadow weed', 'weed', { flowering: true, flowerColor: '#cbb994', leafDesign: 'lanceolate' }],
+  ['rosette-carpet', 'Rosette ground cover', 'groundCover', { leafDesign: 'lobed' }],
+  ['silver-groundcover', 'Silver ground cover', 'groundCover', { leafColor: '#98a595', leafDesign: 'lanceolate', height: .16, width: .95, seed: 221, barkType: 'Bark015' }],
+  ['golden-daisy', 'Golden field daisies', 'flower', { leafDesign: 'serrated' }],
+  ['white-daisy', 'White meadow daisies', 'flower', { flowerColor: '#f0ead8', petalCount: 12, leafDesign: 'lanceolate', height: .65, seed: 337, barkType: 'Bark004' }],
+  ['purple-wildflower', 'Purple wildflowers', 'flower', { flowerColor: '#9c7bb5', petalCount: 6, leafColor: '#6b8567', leafDesign: 'oval', seed: 135, barkType: 'Bark001' }],
+  ['berry-thicket', 'Berry Thicket', 'bush', {seed:7101,height:1.1,width:1.9,branches:5,stemCount:4,density:.65,leafSize:.1,leafDesign:'serrated',barkType:'Bark007',flowering:true,flowerColor:'#ead9d4',petalCount:5}],
+  ['wood-sorrel', 'Wood Sorrel Carpet', 'groundCover', {seed:7102,height:.18,width:.85,stemCount:8,branches:3,density:.6,leafSize:.12,leafDesign:'trifoliate',flowering:true,flowerColor:'#f1e9d8',barkType:'Bark008'}],
   ['moss-cushion', 'Moss Cushion', 'cushion', {seed:7103,height:.12,width:.75,leafSize:.035}],
   ['young-pine', 'Young Pine', 'coniferSapling', {seed:7104}],
   ['fallen-log', 'Fallen Log', 'deadwood', {seed:7105}],
   ['short-meadow-grass', 'Short Meadow Grass', 'grass', {seed:7106,height:.32,width:.45,bladeWidth:.025,stemCount:12}],
-  ['tall-seed-grass', 'Tall Seed Grass', 'grass', {seed:7107,height:1.15,width:.7,seedHeads:true,flowerColor:'#bea56a',stemCount:10}],
-  ['clover-groundcover', 'Clover Groundcover', 'groundCover', {seed:7108,height:.2,width:1.1,leafShape:'clover',leafSize:.16,stemCount:9,branches:3,density:.65,leafColor:'#52834b',flowering:true,flowerColor:'#ece3cf'}],
-  ['sagebrush', 'Sagebrush', 'shrub', {seed:7109,height:.85,width:1.35,branches:4,stemCount:4,density:.35,leafSize:.06,leafColor:'#98a18b',stemColor:'#83705a'}],
-  ['dry-bunchgrass', 'Dry Bunchgrass', 'grass', {seed:7110,height:.65,width:.65,stemCount:14,bladeWidth:.018,leafColor:'#b1a16c',curvature:1.5}],
+  ['tall-seed-grass', 'Tall Seed Grass', 'grass', {seed:7107,height:1.15,width:.7,seedHeads:true,flowerColor:'#bea56a',stemCount:10,barkType:'Bark012'}],
+  ['clover-groundcover', 'Clover Groundcover', 'groundCover', {seed:7108,height:.2,width:1.1,leafDesign:'trifoliate',leafSize:.16,stemCount:9,branches:3,density:.65,leafColor:'#52834b',flowering:true,flowerColor:'#ece3cf',barkType:'Bark006'}],
+  ['sagebrush', 'Sagebrush', 'shrub', {seed:7109,height:.85,width:1.35,branches:4,stemCount:4,density:.35,leafSize:.06,leafDesign:'lanceolate',barkType:'Bark014',leafColor:'#98a18b'}],
+  ['dry-bunchgrass', 'Dry Bunchgrass', 'grass', {seed:7110,height:.65,width:.65,stemCount:14,bladeWidth:.018,leafColor:'#b1a16c',curvature:1.5,barkType:'Bark014'}],
   ['saguaro-cactus', 'Saguaro Cactus', 'cactus', {seed:7111,armCount:3}],
   ['agave-rosette', 'Agave Rosette', 'succulent', {seed:7112}],
-  ['alpine-grass-tuft', 'Alpine Grass Tuft', 'grass', {seed:7113,height:.28,width:.5,stemCount:16,bladeWidth:.018,leafColor:'#7c8257',curvature:1.6}],
-  ['heather-cushion', 'Heather Cushion', 'cushion', {seed:7114,height:.42,width:1,leafSize:.07,branches:7,flowering:true,flowerColor:'#ad829e'}],
+  ['alpine-grass-tuft', 'Alpine Grass Tuft', 'grass', {seed:7113,height:.28,width:.5,stemCount:16,bladeWidth:.018,leafColor:'#7c8257',curvature:1.6,barkType:'Bark002'}],
+  ['heather-cushion', 'Heather Cushion', 'cushion', {seed:7114,height:.42,width:1,leafSize:.07,branches:7,flowering:true,flowerColor:'#ad829e',barkType:'Bark003'}],
 ];
-const plantGroups={Forest:['woodland-shrub','boxwood','young-birch','forest-fern','bracken','berry-thicket','wood-sorrel','moss-cushion','young-pine','fallen-log'],Meadow:['meadow-bush','copper-bush','wild-weed','rosette-carpet','golden-daisy','white-daisy','purple-wildflower','short-meadow-grass','tall-seed-grass','clover-groundcover'],Arid:['sagebrush','dry-bunchgrass','saguaro-cactus','agave-rosette'],Rocky:['silver-groundcover','alpine-grass-tuft','heather-cushion']};
+const plantGroups={Forest:['woodland-shrub','boxwood','young-birch','bush-1','bush-2','bush-3','forest-fern','bracken','berry-thicket','wood-sorrel','moss-cushion','young-pine','fallen-log'],Meadow:['meadow-bush','copper-bush','wild-weed','rosette-carpet','golden-daisy','white-daisy','purple-wildflower','short-meadow-grass','tall-seed-grass','clover-groundcover'],Arid:['sagebrush','dry-bunchgrass','saguaro-cactus','agave-rosette'],Rocky:['silver-groundcover','alpine-grass-tuft','heather-cushion']};
 export const PLANT_PRESETS = Object.freeze(presets.map(([id, name, archetype, overrides]) => Object.freeze({
   id, name, group:Object.keys(plantGroups).find(g=>plantGroups[g].includes(id))||'General',
   layer:archetype==='grass'?'grass':archetype==='flower'?'flowers':'plants',
@@ -141,10 +152,10 @@ function botanicalModel(d) {
   const model = { stems: [], leaves: [], petals: [], centers: [] };
   const addStem = (points, radius, rank = 0) => { model.stems.push({ points, radius, rank }); return points; };
   const addLeaf = (position, direction, length, width, twist = 0, fold = .1) => {
-    if(d.leafShape==='clover'){
+    if(d.leafDesign==='trifoliate'){
       const tip=position.clone().addScaledVector(direction.clone().normalize(),length*.45);
-      for(let i=0;i<3;i++)model.leaves.push({position:tip.clone(),direction:direction.clone().applyAxisAngle(V(0,1,0),(i-1)*1.35).normalize(),length:length*.55,width:length*.52,twist,fold,tint:range(.82,1.17)});
-    } else model.leaves.push({ position, direction: direction.normalize(), length, width, twist, fold, tint: range(.82, 1.17) });
+      for(let i=0;i<3;i++)model.leaves.push({position:tip.clone(),direction:direction.clone().applyAxisAngle(V(0,1,0),(i-1)*1.35).normalize(),length:length*.55,width:length*.52,twist,fold,tint:range(.82,1.17),design:'oval'});
+    } else model.leaves.push({ position, direction: direction.normalize(), length, width, twist, fold, tint: range(.82, 1.17), design: d.leafDesign });
   };
   const radial = (angle, radius, y = 0) => V(Math.cos(angle) * radius, y, Math.sin(angle) * radius);
   const flower = (position, size, tilt, petals = d.petalCount) => {
@@ -296,13 +307,20 @@ class GeometryBatch {
   }
 }
 
-function meshStem(batch, stem, level, preview = false, endBatch = null) {
+function meshStem(batch, stem, level, preview = false, endBatch = null, bark = false) {
   const sections = stem.rounded?(preview?[16,10,6]:[24,14,8])[level]:Math.max(2, Math.round((stem.points.length - 1) / (preview ? [1.5, 2.5, 4] : [1, 1.8, 3])[level]));
   const sides = (stem.rounded?(preview?[12,8,4]:[16,10,6]):preview ? [6, 4, 3] : [7, 5, 3])[level];
   const base = batch.positions.length / 3;
   const paths = Array.from({ length: sections + 1 }, (_, i) => samplePath(stem.points, i / sections));
+  // Use the same source-path distances at every LOD. Thin twigs sample a small
+  // strip of bark instead of squeezing an entire photograph around each tube.
+  const distances = [0];
+  for (let i = 1; i < stem.points.length; i++) distances.push(distances[i - 1] + stem.points[i].distanceTo(stem.points[i - 1]));
+  const barkTile = .18, circumference = TAU * stem.radius;
   for (let i = 0; i <= sections; i++) {
     const t = i / sections;
+    const pathIndex = t * (stem.points.length - 1), segment = Math.min(stem.points.length - 2, Math.floor(pathIndex));
+    const distance = THREE.MathUtils.lerp(distances[segment], distances[segment + 1], pathIndex - segment);
     const tangent = paths[Math.min(sections, i + 1)].clone().sub(paths[Math.max(0, i - 1)]).normalize();
     const axis = Math.abs(tangent.y) < .95 ? V(0, 1, 0) : V(1, 0, 0);
     const normal = V().crossVectors(tangent, axis).normalize();
@@ -313,7 +331,7 @@ function meshStem(batch, stem, level, preview = false, endBatch = null) {
       const a = s / sides * TAU;
       const rib=stem.rounded?(s%2?.96:1.04):1;
       const p = paths[i].clone().addScaledVector(normal, Math.cos(a) * radius*rib).addScaledVector(binormal, Math.sin(a) * radius*rib);
-      batch.vertex(p, s / sides, t, Math.min(.65, Math.max(0, p.y) * .55), .92 + t * .12);
+      batch.vertex(p, bark ? s / sides * circumference / barkTile : s / sides, bark ? distance / barkTile : t, Math.min(.65, Math.max(0, p.y) * .55), .92 + t * .12);
     }
   }
   for (let i = 0; i < sections; i++) for (let s = 0; s < sides; s++) {
@@ -344,6 +362,32 @@ function meshStem(batch, stem, level, preview = false, endBatch = null) {
   }
 }
 
+function leafOutline(design, level) {
+  const mirrored = left => [...left, ...left.slice(1, -1).reverse().map(([t, u]) => [t, -u])];
+  if (design === 'petal') return level === 0 ? mirrored([[0, 0], [.2, -.65], [.52, -1], [.82, -.65], [1, 0]])
+    : level === 1 ? mirrored([[0, 0], [.38, -1], [.78, -.7], [1, 0]]) : mirrored([[0, 0], [.5, -1], [1, 0]]);
+  if (design === 'serrated') return level === 0 ? mirrored([[0, 0], [.18, -.52], [.31, -.78], [.44, -.58], [.59, -1], [.76, -.68], [1, 0]])
+    : level === 1 ? mirrored([[0, 0], [.2, -.62], [.38, -.82], [.52, -.7], [.68, -1], [.82, -.61], [1, 0]]) : mirrored([[0, 0], [.42, -1], [.7, -.72], [1, 0]]);
+  if (design === 'lobed') return level === 0 ? mirrored([[0, 0], [.18, -.78], [.34, -.46], [.5, -1], [.68, -.5], [.82, -.76], [1, 0]])
+    : level === 1 ? mirrored([[0, 0], [.22, -.76], [.38, -.48], [.56, -1], [.72, -.54], [1, 0]]) : mirrored([[0, 0], [.3, -.88], [.55, -.52], [.78, -.72], [1, 0]]);
+  if (design === 'heart') return level === 0 ? mirrored([[0, 0], [.08, -.6], [.2, -1], [.38, -.92], [.62, -.66], [.82, -.34], [1, 0]])
+    : level === 1 ? mirrored([[0, 0], [.16, -.92], [.4, -1], [.7, -.58], [1, 0]]) : mirrored([[0, 0], [.24, -1], [.58, -.78], [1, 0]]);
+  if (design === 'lanceolate') return level === 0 ? mirrored([[0, 0], [.2, -.45], [.48, -.72], [.75, -.52], [1, 0]])
+    : level === 1 ? mirrored([[0, 0], [.42, -.7], [.76, -.5], [1, 0]]) : mirrored([[0, 0], [.52, -.62], [1, 0]]);
+  if (design === 'fernPinna') return level === 0 ? mirrored([[0, 0], [.1, -.3], [.3, -.52], [.7, -.42], [1, 0]])
+    : level === 1 ? mirrored([[0, 0], [.38, -.48], [.72, -.38], [1, 0]]) : mirrored([[0, 0], [.55, -.4], [1, 0]]);
+  if (design === 'coniferNeedle') return level === 0 ? mirrored([[0, 0], [.08, -.35], [.72, -.3], [1, 0]])
+    : level === 1 ? mirrored([[0, 0], [.42, -.3], [.78, -.24], [1, 0]]) : mirrored([[0, 0], [.55, -.28], [1, 0]]);
+  if (design === 'cushionScale') return level === 0 ? mirrored([[0, 0], [.12, -.74], [.42, -1], [.72, -.7], [1, 0]])
+    : level === 1 ? mirrored([[0, 0], [.32, -1], [.72, -.64], [1, 0]]) : mirrored([[0, 0], [.38, -.88], [1, 0]]);
+  if (design === 'grassBlade') return level === 0 ? mirrored([[0, 0], [.12, -.72], [.7, -.55], [.92, -.24], [1, 0]])
+    : level === 1 ? mirrored([[0, 0], [.5, -.56], [.88, -.25], [1, 0]]) : mirrored([[0, 0], [.65, -.46], [1, 0]]);
+  if (design === 'succulent') return level === 0 ? mirrored([[0, 0], [.12, -.58], [.38, -1], [.7, -.82], [.9, -.34], [1, 0]])
+    : level === 1 ? mirrored([[0, 0], [.4, -1], [.75, -.7], [1, 0]]) : mirrored([[0, 0], [.5, -.86], [1, 0]]);
+  return level === 0 ? mirrored([[0, 0], [.2, -.65], [.52, -1], [.82, -.65], [1, 0]])
+    : level === 1 ? mirrored([[0, 0], [.38, -1], [.78, -.7], [1, 0]]) : mirrored([[0, 0], [.5, -1], [1, 0]]);
+}
+
 function meshBlade(batch, leaf, level, sizeScale = 1, petal = false) {
   const direction = leaf.direction;
   let normal = leaf.normal?.clone() || V(0, 1, 0);
@@ -351,9 +395,7 @@ function meshBlade(batch, leaf, level, sizeScale = 1, petal = false) {
   const side = V().crossVectors(direction, normal).normalize().applyAxisAngle(direction, leaf.twist);
   normal = V().crossVectors(side, direction).normalize();
   const length = leaf.length * sizeScale, width = leaf.width * sizeScale;
-  const shape = level === 0 ? [[0, 0], [.2, -.65], [.52, -1], [.82, -.65], [1, 0], [.82, .65], [.52, 1], [.2, .65]]
-    : level === 1 ? [[0, 0], [.38, -1], [.78, -.7], [1, 0], [.78, .7], [.38, 1]]
-      : [[0, 0], [.5, -1], [1, 0], [.5, 1]];
+  const shape = leafOutline(petal ? 'petal' : leaf.design, level);
   const point = (t, u) => leaf.position.clone().addScaledVector(direction, t * length)
     .addScaledVector(side, u * width * .5).addScaledVector(normal, Math.sin(t * Math.PI) * length * leaf.fold * (1 - Math.abs(u) * .6));
   const centre = batch.vertex(point(.5, 0), .5, .5, .55 + Math.max(0, leaf.position.y) * .5, leaf.tint * 1.035);
@@ -397,13 +439,18 @@ export function generatePlant(definition = createPlantDefinition(), { quality = 
   const wind=!['deadwood','cactus','succulent'].includes(d.archetype);
   const deadwood = d.archetype === 'deadwood';
   if (deadwood) materials.ends = new THREE.MeshStandardMaterial({ name: 'Wood cut ends', color: '#d5b991', roughness: .9, vertexColors: true });
-  for (const [key, material] of Object.entries(materials)) material.userData = { pbrFamily: { stems:deadwood?'wood':d.stemMaterial, ends:'endgrain', leaves:d.leafMaterial, petals:d.petalMaterial, centers:'pollen' }[key], pbrTextureScale:key==='ends'?1:d.textureScale, vegetation: true, wind, windStrength: key === 'stems' ? .025 : .055, windAttribute: 'windWeight' };
+  for (const [key, material] of Object.entries(materials)) material.userData = {
+    pbrFamily: { stems:deadwood?'wood':d.stemMaterial, ends:'endgrain', leaves:d.leafMaterial, petals:d.petalMaterial, centers:'pollen' }[key],
+    ...key === 'stems' && !deadwood && d.stemMaterial === 'bark' ? { pbrVariant: d.barkType } : {},
+    ...key === 'leaves' && d.leafMaterial === 'foliage' ? { pbrVariant: d.leafDesign } : {},
+    pbrTextureScale:key==='ends'?1:d.textureScale, vegetation: true, wind, windStrength: key === 'stems' ? .025 : .055, windAttribute: 'windWeight',
+  };
   const lods = [0, 1, 2].map(level => {
     const group = new THREE.Group(); group.name = `lod${level}`;
     group.userData = { assetType: 'plant', archetype: d.archetype, definitionHash, lod: level, definition: structuredClone(d), wind };
     const batches = { stems: new GeometryBatch(), leaves: new GeometryBatch(), petals: new GeometryBatch(), centers: new GeometryBatch() };
     if (deadwood) batches.ends = new GeometryBatch();
-    for (const stem of model.stems) if (level < 2 || stem.rank < 2) meshStem(batches.stems, stem, level, preview, batches.ends);
+    for (const stem of model.stems) if (level < 2 || stem.rank < 2) meshStem(batches.stems, stem, level, preview, batches.ends, !deadwood && d.stemMaterial === 'bark');
     const stride = (preview ? [2, 4, 8] : [1, 2, 4])[level];
     const bladeLevel = Math.min(2, level + (preview ? 1 : 0));
     model.leaves.forEach((leaf, i) => { if (i % stride === 0) meshBlade(batches.leaves, leaf, bladeLevel, [1, 1.16, 1.3][level]); });

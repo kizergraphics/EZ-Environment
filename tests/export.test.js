@@ -24,9 +24,10 @@ import {
 // These DOM-free tests exercise geometry, manifests and transforms. Actual
 // generated PBR map embedding is covered by export-pbr-fixture.mjs in a browser.
 function geometryOnly(asset) {
-  for (const root of asset.lods) root.traverse(node => {
-    if (node.material) delete node.material.userData.pbrFamily;
-  });
+  for (const variant of asset.variants ?? [asset])
+    for (const root of variant.lods) root.traverse(node => {
+      if (node.material) delete node.material.userData.pbrFamily;
+    });
   return asset;
 }
 const generateRock = definition => geometryOnly(generateTexturedRock(definition));
@@ -305,6 +306,28 @@ test('environment export snapshots deterministic placements and validates every 
     ),
   );
   environment.dispose();
+});
+
+test('rock variation seeds expand to matching ephemeral manifest-v1 asset aliases', async () => {
+  const rock=geometryOnly(generateTexturedRock(createRockDefinition('rock',{seed:44}),{variants:true}));
+  const records=[0,1,5].map((variationSeed,index)=>({
+    species:'rock',position:[index*2,0,0],normal:[0,1,0],yaw:0,
+    scale:[1,1,1],tint:1,variationSeed,
+  }));
+  const environment={
+    registry:new Map([['rock',rock]]),options:{version:1,seed:1},
+    placement:{hash:'variants',chunks:new Map([['0:0',{x:0,z:0,layers:{rocks:{records}}}]])},
+  };
+  try{
+    const manifest=createEnvironmentManifest(environment);
+    assert.equal(manifest.version,1);
+    assert.deepEqual(manifest.assets.map(asset=>asset.id),['rock__v1','rock__v2','rock__v3']);
+    const pack=await exportEnvironmentPack(environment,{download:false,includeInstancedScene:true,includeBakedChunks:true});
+    const chunk=JSON.parse(strFromU8(pack.files['chunks/chunk_0_0.json']));
+    assert.deepEqual(chunk.layers[0].instances.map(record=>record.asset),['rock__v1','rock__v2','rock__v3']);
+    assert.ok(pack.files['assets/rock__v2/lod0.glb']);
+    assert.ok(validateManifest(pack.manifest,pack.files).valid);
+  }finally{rock.dispose();}
 });
 
 test('terrain and authored static objects are packaged alongside scatter data', async () => {

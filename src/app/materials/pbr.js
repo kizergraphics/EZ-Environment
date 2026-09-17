@@ -42,49 +42,45 @@ export function getBotanicalMaps(id = 'foliage') {
 }
 
 const families=new Map();
+const barkTypes=new Set(['Bark001','Bark002','Bark003','Bark004','Bark006','Bark007','Bark008','Bark012','Bark013','Bark014','Bark015']);
 const hasPbrMaps=material=>['map','normalMap','roughnessMap'].every(slot=>{
   const image=material[slot]?.image;return image?.width>0&&image?.height>0;
 });
 function abort(signal){if(signal?.aborted)throw signal.reason||new DOMException('Material preparation cancelled.','AbortError');}
-export async function loadPbrFamily(id,{signal}={}) {
+export async function loadPbrFamily(id,{signal,variant}={}) {
   abort(signal);
   if(['wood','endgrain'].includes(id))return loadWoodMaps(id);
   if(['foliage','stem','petal','pollen'].includes(id)) {
     if (typeof document === 'undefined') return getBotanicalMaps(id);
-    return id === 'foliage' ? loadLeafSurface() : plantDetailMaps(id, getBotanicalMaps(id));
+    return id === 'foliage' ? loadLeafSurface(variant) : plantDetailMaps(id, getBotanicalMaps(id));
   }
   if(!['bark','stone','sandstone'].includes(id))throw new Error(`Unknown PBR material family: ${id}`);
-  if(!families.has(id))families.set(id,(async()=>{
-    const base=id==='bark'?'/textures/bark/Bark004_1K-JPG/Bark004_1K-JPG':`/textures/biomes/${id==='stone'?'weathered-rock':'sandstone'}`;
+  const barkType=id==='bark'?(variant??'Bark004'):undefined;
+  if(id==='bark'&&!barkTypes.has(barkType))throw new Error(`Unknown bark texture: ${barkType}`);
+  // Headless contexts cannot decode the bundled photographs; the analytic stem
+  // detail keeps bark materials usable for DOM-free generation and tests.
+  if (typeof document === 'undefined' && id === 'bark') return getBotanicalMaps('stem');
+  const cacheKey=id==='bark'?`${id}:${barkType}`:id;
+  if(!families.has(cacheKey))families.set(cacheKey,(async()=>{
+    const base=id==='bark'?`/textures/bark/${barkType}_1K-JPG/${barkType}_1K-JPG`:`/textures/biomes/${id==='stone'?'weathered-rock':'sandstone'}`;
     const paths=id==='bark'?['_Color.jpg','_NormalGL.jpg','_Roughness.jpg']:['/color-2048.jpg','/normal-2048.png','/roughness-2048.png'];
     const loader=new THREE.TextureLoader(),settled=await Promise.allSettled(paths.map(path=>loader.loadAsync(base+path)));
     if(settled.some(r=>r.status==='rejected')){settled.forEach(r=>{if(r.status==='fulfilled')r.value.dispose();});throw new Error(`Could not load ${id} PBR textures. Retry generation.`);}
     const [map,normalMap,roughnessMap]=settled.map(r=>r.value);
     if(id!=='bark')return improveRockMaps(id,{map,normalMap,roughnessMap});
-    // Neutral brightness modulation preserves the authored color controls.
-    const canvas=document.createElement('canvas');canvas.width=map.image.width;canvas.height=map.image.height;
-    const ctx=canvas.getContext('2d');ctx.drawImage(map.image,0,0);const pixels=ctx.getImageData(0,0,canvas.width,canvas.height);
-    let mean=0;
-    for(let i=0;i<pixels.data.length;i+=4)mean+=.2126*pixels.data[i]+.7152*pixels.data[i+1]+.0722*pixels.data[i+2];
-    mean/=pixels.data.length/4;
-    for(let i=0;i<pixels.data.length;i+=4){
-      const l=.2126*pixels.data[i]+.7152*pixels.data[i+1]+.0722*pixels.data[i+2];
-      // Lift the mean, while retaining crevice/mineral contrast instead of
-      // compressing all source detail into a nearly flat white texture.
-      const value=Math.max(60,Math.min(255,205+(l-mean)*1.8));
-      for(let channel=0;channel<3;channel++)pixels.data[i+channel]=Math.max(0,Math.min(255,value+(pixels.data[i+channel]-l)*.65));
-    }
-    ctx.putImageData(pixels,0,0);map.image=canvas;map.colorSpace=THREE.SRGBColorSpace;
-    for(const t of [map,normalMap,roughnessMap]){t.wrapS=t.wrapT=THREE.RepeatWrapping;t.needsUpdate=true;}
+    // Preserve the photographed bark's color and fissure contrast. A neutral
+    // material tint shows the selected species surface without a brown wash.
+    map.colorSpace=THREE.SRGBColorSpace;
+    for(const t of [map,normalMap,roughnessMap]){t.wrapS=t.wrapT=THREE.RepeatWrapping;t.anisotropy=8;t.needsUpdate=true;}
     return {map,normalMap,roughnessMap};
-  })().catch(error=>{families.delete(id);throw error;}));
-  const maps=await families.get(id);abort(signal);return maps;
+  })().catch(error=>{families.delete(cacheKey);throw error;}));
+  const maps=await families.get(cacheKey);abort(signal);return maps;
 }
 
 export async function prepareAssetMaterials(asset,{signal}={}) {
   abort(signal);const materials=new Set();
   for(const root of asset.lods||[asset.object3D])root?.traverse(o=>{for(const m of Array.isArray(o.material)?o.material:[o.material])if(m?.userData.pbrFamily&&!(m.userData.pbrReady&&hasPbrMaps(m)))materials.add(m);});
-  const loaded=await Promise.all([...materials].map(async material=>({material,maps:material.userData.pbrPreserveColorMap && ['foliage','petal'].includes(material.userData.pbrFamily) ? getBotanicalMaps(material.userData.pbrFamily) : await loadPbrFamily(material.userData.pbrFamily,{signal})})));abort(signal);
+  const loaded=await Promise.all([...materials].map(async material=>({material,maps:material.userData.pbrPreserveColorMap && ['foliage','petal'].includes(material.userData.pbrFamily) ? getBotanicalMaps(material.userData.pbrFamily) : await loadPbrFamily(material.userData.pbrFamily,{signal,variant:material.userData.pbrVariant})})));abort(signal);
   for(const {material,maps}of loaded){
     if(material.userData.pbrReady&&hasPbrMaps(material))continue;
     // Separately parsed worker LODs can share the same structured-cloned metadata

@@ -3,8 +3,8 @@ import { exportGLB, downloadBlob } from './export/exporters.js';
 import { createExportSnapshot } from './export/snapshot.js';
 import { appendMaterialCatalog } from './export/material-catalog.js';
 import { zipSync } from 'three/addons/libs/fflate.module.js';
-import { Billboard, TreePreset, Tree, TreeType } from 'ez-environment';
-import { BarkType, LeafType, applyTreeTextures, loadPresetWithTextures } from './textures';
+import { Billboard, Tree, TreeType } from 'ez-environment';
+import { APP_TREE_PRESET_NAMES, BarkType, LeafType, applyTreeTextures, loadPresetWithTextures } from './textures';
 import { Environment } from './environment';
 import { OrbitControls } from 'three/examples/jsm/Addons.js';
 import { version } from '../../package.json';
@@ -633,7 +633,7 @@ export function setupUI(tree, environment, renderer, scene, camera, orbitControl
   const presetsSection = createSection('Presets', 'swatch', true);
 
   const presetSelect = createSelect('Preset',
-    Object.fromEntries(Object.keys(TreePreset).map(p => [p, p])),
+    Object.fromEntries(APP_TREE_PRESET_NAMES.map(p => [p, p])),
     initialPreset,
     (val) => {
       loadPresetWithTextures(tree, val);

@@ -5,7 +5,24 @@ import { slabGeometry, formationLayout, stoneSurface } from './rock-forms.js';
 // All dimensions are meters. Definitions are data, so they can be saved without
 // serializing a Three.js scene and regenerated identically on another machine.
 export const ROCK_ARCHETYPES = Object.freeze(['pebble', 'rock', 'boulder', 'cluster', 'slab', 'outcrop']);
+export const ROCK_SHAPE_PROFILES = Object.freeze([
+  'rounded',
+  'fieldstone',
+  'fracturedBlock',
+  'wedge',
+  'standingShard',
+  'ledgestone',
+  'irregularBoulder',
+]);
 const ARCHETYPES = ROCK_ARCHETYPES;
+const PROFILE_DEFAULTS = Object.freeze({
+  pebble: 'rounded',
+  rock: 'fieldstone',
+  boulder: 'irregularBoulder',
+  cluster: 'fieldstone',
+  slab: 'ledgestone',
+  outcrop: 'ledgestone',
+});
 const DEFAULTS = {
   slab: {width:2.2,height:.4,depth:1.5,roundness:.05,angularity:.95,flattening:.8,displacement:.15,color:'#b1ac91',flatShading:true,colliderMode:'box',strata:.7},
   outcrop: {width:5.6,height:3.5,depth:4,roundness:.06,angularity:.95,flattening:.5,displacement:.2,color:'#838480',flatShading:true,colliderMode:'box',strata:.2},
@@ -79,8 +96,9 @@ export function createRockDefinition(archetype = 'rock', overrides = {}) {
   archetype = overrides.archetype ?? archetype;
   if (!ARCHETYPES.includes(archetype))
     throw new Error(`Unknown rock archetype: ${archetype}`);
+  const version = overrides.version ?? 2;
   const result = {
-    version: 1,
+    version,
     seed: 18427,
     archetype,
     asymmetry: 0.35,
@@ -96,8 +114,14 @@ export function createRockDefinition(archetype = 'rock', overrides = {}) {
     ...DEFAULTS[archetype],
     ...overrides,
   };
-  if (result.version !== 1)
+  if (![1, 2].includes(result.version))
     throw new Error(`Unsupported rock preset version: ${result.version}`);
+  // Version 1 is intentionally left byte-for-byte compatible with existing
+  // saved definitions and hashes. New definitions opt into the macro profile.
+  if (result.version === 2) result.shapeProfile = overrides.shapeProfile ?? PROFILE_DEFAULTS[archetype];
+  else delete result.shapeProfile;
+  if (result.version === 2 && !ROCK_SHAPE_PROFILES.includes(result.shapeProfile))
+    throw new Error(`Unknown rock shapeProfile: ${result.shapeProfile}`);
   if (!['stone','sandstone'].includes(result.surfaceMaterial)) throw new Error('Unknown rock surfaceMaterial.');
   finite(result.textureScale, 'textureScale', .05, 20);
   finite(result.seed, 'seed', 0, 0xffffffff, true);
@@ -167,7 +191,7 @@ function definitionHash(definition) {
   let hash = 2166136261;
   for (const character of canonical(definition))
     hash = Math.imul(hash ^ character.charCodeAt(0), 16777619) >>> 0;
-  return `rock-v1-${hash.toString(16).padStart(8, '0')}`;
+  return `rock-v${definition.version}-${hash.toString(16).padStart(8, '0')}`;
 }
 
 // Indexed subdivision shares edge vertices. A positive radial displacement and
@@ -274,6 +298,44 @@ function deformation(definition) {
       if (position.y < -0.35)
         position.y =
           -0.35 + (position.y + 0.35) * (1 - definition.flattening * 0.65);
+      if (definition.version === 2) {
+        const profile = definition.shapeProfile;
+        const normalizedY = THREE.MathUtils.clamp((position.y + 1) * .5, 0, 1);
+        if (profile === 'fieldstone') {
+          // A broad shoulder and subdued crown reads as a fieldstone instead of
+          // a uniformly inflated sphere, even when viewed only in silhouette.
+          const shoulder = 1 + .22 * Math.sin(Math.PI * normalizedY);
+          position.x *= shoulder;
+          position.z *= 1 + .13 * Math.sin(Math.PI * normalizedY);
+          if (position.y > .28) position.y = .28 + (position.y - .28) * .62;
+        } else if (profile === 'fracturedBlock') {
+          // Superellipsoid-style expansion creates broad fracture planes while
+          // preserving the closed indexed sphere topology.
+          position.x = Math.sign(position.x) * Math.sqrt(Math.abs(position.x));
+          position.y = Math.sign(position.y) * Math.sqrt(Math.abs(position.y));
+          position.z = Math.sign(position.z) * Math.sqrt(Math.abs(position.z));
+        } else if (profile === 'wedge') {
+          const rise = .48 + .52 * THREE.MathUtils.clamp((position.x + 1) * .5, 0, 1);
+          position.y = -1 + (position.y + 1) * rise;
+          position.z *= .82 + .18 * rise;
+        } else if (profile === 'standingShard') {
+          const taper = 1 - .58 * normalizedY;
+          position.x *= taper;
+          position.z *= .72 + .28 * taper;
+          position.x += .16 * normalizedY * Math.sin(phases[10]);
+        } else if (profile === 'ledgestone') {
+          const terrace = position.y > .18 ? .72 : position.y > -.2 ? .88 : 1;
+          position.x *= terrace;
+          position.z *= terrace;
+          if (position.y > .2) position.y = .2 + (position.y - .2) * .42;
+        } else if (profile === 'irregularBoulder') {
+          const lobe = 1 + .2 * Math.sin(position.y * 3.2 + phases[9]);
+          position.x *= lobe;
+          position.z *= 2 - lobe;
+          position.x += .2 * normalizedY * Math.sin(phases[10]);
+          position.z += .15 * normalizedY * Math.cos(phases[11]);
+        }
+      }
       return position;
     },
   };
@@ -444,7 +506,7 @@ function projectStoneUV(geometry, tileSize) {
 }
 
 /** Generate three exportable LOD groups. Clones share resources; dispose once. */
-export function generateRock(
+function generateRockSingle(
   input = createRockDefinition(),
   { quality = 'export' } = {},
 ) {
@@ -477,8 +539,8 @@ export function generateRock(
       lod: level,
       wind: false,
     };
-    const formation=definition.archetype==='outcrop'?formationLayout(definition.seed,random):null;
-    const sourceCount = definition.archetype === 'cluster' || formation ? 4 : 1;
+    const formation=definition.archetype==='outcrop'?formationLayout(definition.seed,random,definition.version):null;
+    const sourceCount = formation?.length ?? (definition.archetype === 'cluster' ? 4 : 1);
     const sources = Array.from({ length: sourceCount }, (_, index) => {
       const species = {
         ...definition,
@@ -583,11 +645,67 @@ export function generateRock(
   };
 }
 
+/**
+ * Generate a rock asset and, for environment use, an optional deterministic
+ * silhouette bank. A v1 definition always remains a single exact legacy form.
+ */
+export function generateRock(
+  input = createRockDefinition(),
+  { quality = 'export', variants = false } = {},
+) {
+  if (!variants) return generateRockSingle(input, { quality });
+  const definition = createRockDefinition(input.archetype ?? 'rock', input);
+  if (definition.version === 1) return generateRockSingle(definition, { quality });
+  const count = ['cluster', 'outcrop'].includes(definition.archetype) ? 2 : 3;
+  const generated = Array.from({ length: count }, (_, index) =>
+    generateRockSingle({
+      ...definition,
+      seed: (definition.seed + index * 0x9e3779b9) >>> 0,
+    }, { quality }),
+  );
+  const primary = generated[0];
+  // Variants differ only in geometry. Sharing the authored surface avoids
+  // cloning identical PBR textures for every bank member in dense catalogs.
+  const sharedMaterial = primary.lods[0].children[0].material;
+  for (const asset of generated.slice(1))
+    for (const lod of asset.lods)
+      lod.traverse(object => { if (object.isMesh) object.material = sharedMaterial; });
+  const baseHash = definitionHash(definition);
+  primary.definition = definition;
+  primary.definitionHash = baseHash;
+  primary.variants = generated.map((asset, index) => ({
+    ...asset,
+    definition,
+    definitionHash: `${baseHash}__v${index + 1}`,
+    variantIndex: index,
+  }));
+  let disposed = false;
+  const disposers = generated.map(asset => asset.dispose);
+  primary.dispose = () => {
+    if (disposed) return;
+    disposed = true;
+    disposers.forEach(dispose => dispose());
+  };
+  return primary;
+}
+
+export function selectRockVariant(asset, variationSeed = 0) {
+  if (!asset?.variants?.length) return asset;
+  const seed = Number.isInteger(variationSeed) ? variationSeed >>> 0 : 0;
+  return asset.variants[seed % asset.variants.length];
+}
+
+export function rockVariantIndex(asset, variationSeed = 0, lod = 0) {
+  if (lod !== 0 || !asset?.variants?.length) return 0;
+  const seed = Number.isInteger(variationSeed) ? variationSeed >>> 0 : 0;
+  return seed % asset.variants.length;
+}
+
 const legacyRockPresets = [
   {
     id: 'river-pebble',
     name: 'River Pebble',
-    definition: createRockDefinition('pebble'),
+    definition: createRockDefinition('pebble', { shapeProfile: 'rounded' }),
   },
   {
     id: 'warm-pebble',
@@ -599,12 +717,13 @@ const legacyRockPresets = [
       height: 0.11,
       depth: 0.19,
       surfaceMaterial: 'sandstone',
+      shapeProfile: 'rounded',
     }),
   },
   {
     id: 'field-rock',
     name: 'Field Rock',
-    definition: createRockDefinition('rock'),
+    definition: createRockDefinition('rock', { shapeProfile: 'fieldstone' }),
   },
   {
     id: 'angular-slate',
@@ -619,6 +738,7 @@ const legacyRockPresets = [
       depth: 0.9,
       color: '#667681',
       flattening: 0.8,
+      shapeProfile: 'wedge',
     }),
   },
   {
@@ -628,6 +748,7 @@ const legacyRockPresets = [
       seed: 98412,
       color: '#8b8883',
       variation: 0.24,
+      shapeProfile: 'irregularBoulder',
     }),
   },
   {
@@ -642,6 +763,7 @@ const legacyRockPresets = [
       height: 2.4,
       depth: 2.8,
       surfaceMaterial: 'sandstone',
+      shapeProfile: 'fieldstone',
     }),
   },
   {
@@ -668,16 +790,16 @@ const legacyRockPresets = [
 ];
 
 const additions=[
-  ['wet-river-stone','Wet River Stone','pebble','General',{seed:8101,width:.32,height:.14,depth:.25,color:'#555f60',roughness:.3,roundness:.98,angularity:.02}],
-  ['desert-gravel','Desert Gravel','pebble','Arid',{seed:8102,width:.12,height:.065,depth:.09,color:'#b49c7b',roundness:.2,angularity:.85}],
-  ['low-fieldstone','Low Fieldstone','rock','Meadow',{seed:8103,width:1.4,height:.35,depth:1.1,flattening:.85,roundness:.7}],
-  ['basalt-chunk','Basalt Chunk','rock','Rocky',{seed:8104,color:'#454a49',roundness:.02,angularity:1,flatShading:true,width:1,height:.85,depth:.8}],
-  ['standing-stone','Standing Stone','rock','Rocky',{seed:8105,width:.85,height:2.7,depth:.7,roundness:.03,angularity:1,displacement:.14,flatShading:true}],
-  ['limestone-slab','Limestone Slab','slab','Rocky',{seed:8106,color:'#b5b29b',strata:.45}],
-  ['red-sandstone-slab','Red Sandstone Slab','slab','Arid',{seed:8107,color:'#ab7355',strata:1,width:2.5,height:.65,depth:1.8}],
-  ['glacial-erratic','Glacial Erratic','boulder','Meadow',{seed:8108,width:3.8,height:2.1,depth:3.1,roundness:.85,angularity:.15,color:'#969690',variation:.3}],
-  ['volcanic-boulder','Volcanic Boulder','boulder','Rocky',{seed:8109,color:'#514e49',angularity:.95,roundness:.03,displacement:.75,frequency:6,flatShading:true}],
-  ['mossy-forest-boulder','Mossy Forest Boulder','boulder','Forest',{seed:8110,width:2.5,height:1.6,depth:2.1,roundness:.7,color:'#858681',weatheringAmount:.9,weatheringColor:'#65763c'}],
+  ['wet-river-stone','Wet River Stone','pebble','General',{seed:8101,width:.32,height:.14,depth:.25,color:'#555f60',roughness:.3,roundness:.98,angularity:.02,shapeProfile:'rounded'}],
+  ['desert-gravel','Desert Gravel','pebble','Arid',{seed:8102,width:.12,height:.065,depth:.09,color:'#b49c7b',roundness:.2,angularity:.85,shapeProfile:'fracturedBlock'}],
+  ['low-fieldstone','Low Fieldstone','rock','Meadow',{seed:8103,width:1.4,height:.35,depth:1.1,flattening:.85,roundness:.7,shapeProfile:'fieldstone'}],
+  ['basalt-chunk','Basalt Chunk','rock','Rocky',{seed:8104,color:'#454a49',roundness:.02,angularity:1,flatShading:true,width:1,height:.85,depth:.8,shapeProfile:'fracturedBlock'}],
+  ['standing-stone','Standing Stone','rock','Rocky',{seed:8105,width:.85,height:2.7,depth:.7,roundness:.03,angularity:1,displacement:.14,flatShading:true,shapeProfile:'standingShard'}],
+  ['limestone-slab','Limestone Slab','slab','Rocky',{seed:8106,color:'#b5b29b',strata:.45,shapeProfile:'ledgestone'}],
+  ['red-sandstone-slab','Red Sandstone Slab','slab','Arid',{seed:8107,color:'#ab7355',strata:1,width:2.5,height:.65,depth:1.8,shapeProfile:'ledgestone'}],
+  ['glacial-erratic','Glacial Erratic','boulder','Meadow',{seed:8108,width:3.8,height:2.1,depth:3.1,roundness:.85,angularity:.15,color:'#969690',variation:.3,shapeProfile:'rounded'}],
+  ['volcanic-boulder','Volcanic Boulder','boulder','Rocky',{seed:8109,color:'#514e49',angularity:.95,roundness:.03,displacement:.75,frequency:6,flatShading:true,shapeProfile:'fracturedBlock'}],
+  ['mossy-forest-boulder','Mossy Forest Boulder','boulder','Forest',{seed:8110,width:2.5,height:1.6,depth:2.1,roundness:.7,color:'#858681',weatheringAmount:.9,weatheringColor:'#65763c',shapeProfile:'irregularBoulder'}],
   ['talus-scree','Talus Scree','cluster','Rocky',{seed:8111,clusterMix:'scree',count:28,radius:1.35,spacing:.22,width:.45,height:.1,depth:.32,strata:0,flatShading:true,color:'#85877e'}],
   ['river-stone-bed','River Stone Bed','cluster','General',{seed:8112,clusterMix:'pebbles',count:40,radius:1.45,spacing:.22,width:.25,height:.12,depth:.3,roundness:.95,color:'#7e8785'}],
   ['granite-outcrop','Granite Outcrop','outcrop','Rocky',{seed:8113,strata:.1}],

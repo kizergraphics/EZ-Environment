@@ -1,10 +1,16 @@
 import * as THREE from 'three';
 
-let leafSource;
-/** A whole leaf interior, not a branch atlas: each generated blade gets veins. */
-export async function loadLeafSurface() {
-  if (!leafSource) leafSource = (async () => {
-    const source = await new THREE.TextureLoader().loadAsync('/textures/plants/leaf-surface-v1.png');
+const leafSources = new Map();
+const textureFamily = design => ['lobed', 'heart', 'trifoliate'].includes(design) ? 'palmate'
+  : ['lanceolate', 'fernPinna', 'succulent'].includes(design) ? 'parallel'
+    : ['coniferNeedle', 'cushionScale', 'grassBlade'].includes(design) ? 'needle' : 'broad';
+const sourcePath = family => family === 'broad' ? '/textures/plants/leaf-surface-v1.png' : `/textures/plants/leaf-surface-${family}-v1.png`;
+
+/** Whole leaf interiors, not branch atlases: each generated blade gets matching venation. */
+export async function loadLeafSurface(design = 'oval') {
+  const family = textureFamily(design);
+  if (!leafSources.has(family)) leafSources.set(family, (async () => {
+    const source = await new THREE.TextureLoader().loadAsync(sourcePath(family));
     try {
       const size = 1024, canvas = document.createElement('canvas');
       canvas.width = canvas.height = size;
@@ -40,13 +46,13 @@ export async function loadLeafSurface() {
         map.colorSpace = srgb ? THREE.SRGBColorSpace : THREE.NoColorSpace;
         map.wrapS = map.wrapT = THREE.RepeatWrapping; map.anisotropy = 8;
         // Source base is at the bottom of the image and generated blade v=0.
-        map.flipY = true;
+        map.flipY = true; map.userData = { leafSurfaceFamily: family };
         return map;
       };
       return { map: texture(color, 'color', true), normalMap: texture(normal, 'normal'), roughnessMap: texture(roughness, 'roughness') };
     } finally { source.dispose(); }
-  })().catch(error => { leafSource = null; throw new Error(`Leaf surface texture failed to load: ${error.message}`); });
-  return leafSource;
+  })().catch(error => { leafSources.delete(family); throw new Error(`Leaf surface texture failed to load: ${error.message}`); }));
+  return leafSources.get(family);
 }
 
 const details = new Map();
