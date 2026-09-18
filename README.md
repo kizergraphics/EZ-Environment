@@ -6,7 +6,7 @@
 >
 > EZ-Tree is the MIT-licensed procedural tree generator at the heart of this project. EZ Environment keeps that foundation and expands it into a standalone authoring studio for trees, plants, rocks, terrain, and complete environments. The original copyright and license notice are preserved in [LICENSE](LICENSE). Thank you to Daniel for making the original project available.
 
-[![Latest release](https://img.shields.io/github/v/release/kizergraphics/EZ-Environment?display_name=tag&sort=semver)](https://github.com/kizergraphics/EZ-Environment/releases/latest)
+[![Release v1.2.0](https://img.shields.io/badge/release-v1.2.0-b8d89f)](https://github.com/kizergraphics/EZ-Environment/releases/latest)
 [![Windows](https://img.shields.io/badge/platform-Windows%20x64-4b7447)](https://github.com/kizergraphics/EZ-Environment/releases/latest)
 [![CI](https://github.com/kizergraphics/EZ-Environment/actions/workflows/ci.yml/badge.svg)](https://github.com/kizergraphics/EZ-Environment/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-b8d89f)](LICENSE)
