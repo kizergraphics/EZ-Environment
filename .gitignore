@@ -50,6 +50,20 @@ unity-validation/
 unity-validation*.log
 jspm_packages/
 
+# Local authoring/review material (never publish)
+screenshots/
+prompts/
+*.prompt.md
+*_prompt.md
+*_prompts.md
+RESUME*.md
+*_Technical_Plan*.md
+*_Gauntlet_*.pdf
+scripts/screenshot-*.mjs
+
+# Packaged binaries belong in GitHub Releases, not source control
+*.exe
+
 # Snowpack dependency directory (https://snowpack.dev/)
 web_modules/
 

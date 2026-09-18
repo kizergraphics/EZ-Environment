@@ -1,164 +1,161 @@
 # EZ Environment
 
-> **This project is built on [EZ-Tree](https://github.com/dgreenheck/ez-tree) by [Daniel Greenheck](https://github.com/dgreenheck).**
-> EZ-Tree is the MIT-licensed procedural tree generator that powers all tree generation in this app. EZ Environment extends it into a full standalone authoring studio for plants, rocks, and whole environments. The original copyright and license notice are preserved in [LICENSE](LICENSE) — huge thanks to Daniel for the foundation.
+## Project origin
 
-EZ Environment is a local, offline-first procedural authoring studio for Windows: shape trees, plants, and rocks, scatter them across biome-driven terrain, and export textured game-ready assets — all in a portable desktop app.
+> **EZ Environment is based on [EZ-Tree](https://github.com/dgreenheck/ez-tree) by [Daniel Greenheck](https://github.com/dgreenheck).**
+>
+> EZ-Tree is the MIT-licensed procedural tree generator at the heart of this project. EZ Environment keeps that foundation and expands it into a standalone authoring studio for trees, plants, rocks, terrain, and complete environments. The original copyright and license notice are preserved in [LICENSE](LICENSE). Thank you to Daniel for making the original project available.
 
-## Download
+[![Latest release](https://img.shields.io/github/v/release/kizergraphics/EZ-Environment?display_name=tag&sort=semver)](https://github.com/kizergraphics/EZ-Environment/releases/latest)
+[![Windows](https://img.shields.io/badge/platform-Windows%20x64-4b7447)](https://github.com/kizergraphics/EZ-Environment/releases/latest)
+[![CI](https://github.com/kizergraphics/EZ-Environment/actions/workflows/ci.yml/badge.svg)](https://github.com/kizergraphics/EZ-Environment/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-b8d89f)](LICENSE)
 
-Grab the latest portable build from the **[Releases](https://github.com/kizergraphics/EZ-Environment/releases)** page — a single `.exe`, no install required.
-
-## Screenshots
+Create game-ready natural assets without leaving your desktop. EZ Environment is a local, offline-first procedural authoring studio for shaping individual assets, composing seeded biomes, and exporting reusable PBR content for real-time projects.
 
 <p align="center">
-<img src="https://github.com/kizergraphics/EZ-Environment/releases/download/v1.2.0/ez-environment-forest.png" alt="Forest biome overview">
+  <a href="https://github.com/kizergraphics/EZ-Environment/releases/latest"><strong>Download the latest portable Windows build</strong></a>
+  ·
+  <a href="docs/USER_GUIDE.md">Read the user guide</a>
+  ·
+  <a href="unity/README.md">Unity import guide</a>
 </p>
 
-| | |
+<p align="center">
+  <img src="https://github.com/kizergraphics/EZ-Environment/releases/download/v1.2.0/ez-environment-forest-ground.png" alt="EZ Environment forest biome viewed from ground level" width="100%">
+</p>
+
+## What you can make
+
+- **Procedural trees** — start from ash, aspen, oak, pine, bush, and trellis presets, then shape the trunk, branches, leaves, bark, wind, and level of detail.
+- **Plants and ground cover** — author shrubs, saplings, ferns, weeds, flowers, grasses, cacti, succulents, cushions, young conifers, and deadwood from a 30-preset catalog.
+- **Rocks and formations** — create pebbles, fieldstones, boulders, slabs, clusters, and connected outcrops from 22 presets with editable silhouettes and surface treatments.
+- **Complete biomes** — compose forest, desert, meadow, and rocky worlds with deterministic terrain, vegetation, stones, lighting, fog, wind, and density controls.
+
+Everything is seed-driven, so a useful result can be reproduced, adjusted, saved as a project, or regenerated as a variation.
+
+## Highlights
+
+- Four focused workspaces: **Tree**, **Plant**, **Rock**, and **Environment**.
+- Naturalistic and Photorealistic appearance modes with Low, Medium, and High preview quality.
+- Real PBR bark across every stem-bearing plant archetype, with 11 selectable bark designs and tint controls.
+- Color, normal, and roughness textures applied consistently across every exported LOD.
+- Biome-aware placement with slope, elevation, moisture, canopy, spacing, patchiness, tilt, and burial controls.
+- Paintable density and exclusion masks, plus grayscale density-map import.
+- Full project save/load, local workspace recovery, camera bookmarks, undo/redo, clean view, and PNG capture up to 4K.
+- Portable Windows packaging with no installer, account, cloud service, or Internet connection required.
+
+## A studio for assets and worlds
+
+| Tree editor | Plant Studio | Rock Studio |
+|---|---|---|
+| <img src="https://github.com/kizergraphics/EZ-Environment/releases/download/v1.2.0/ez-environment-tree-editor.png" alt="Procedural tree editor" width="100%"> | <img src="https://github.com/kizergraphics/EZ-Environment/releases/download/v1.2.0/ez-environment-plant-studio.png" alt="Plant Studio showing a generated shrub" width="100%"> | <img src="https://github.com/kizergraphics/EZ-Environment/releases/download/v1.2.0/ez-environment-rock-studio.png" alt="Rock Studio showing a generated fieldstone" width="100%"> |
+
+The individual studios share the same live 3D workspace. Move between asset design and environment composition without exporting intermediate files, and preview the latest authored asset directly in a biome before committing to an export.
+
+## Four seeded biomes
+
+| Forest | Desert |
 |---|---|
-| ![Plant Studio](https://github.com/kizergraphics/EZ-Environment/releases/download/v1.2.0/ez-environment-plant-studio.png) | ![Bark closeup](https://github.com/kizergraphics/EZ-Environment/releases/download/v1.2.0/ez-environment-bark-closeup.png) |
-| ![Desert biome](https://github.com/kizergraphics/EZ-Environment/releases/download/v1.2.0/ez-environment-desert.png) | ![Rocky biome](https://github.com/kizergraphics/EZ-Environment/releases/download/v1.2.0/ez-environment-rocky.png) |
-| ![Tree editor](https://github.com/kizergraphics/EZ-Environment/releases/download/v1.2.0/ez-environment-tree-editor.png) | ![Rock studio](https://github.com/kizergraphics/EZ-Environment/releases/download/v1.2.0/ez-environment-rock-studio.png) |
+| <img src="https://github.com/kizergraphics/EZ-Environment/releases/download/v1.2.0/ez-environment-forest.png" alt="Generated forest biome" width="100%"> | <img src="https://github.com/kizergraphics/EZ-Environment/releases/download/v1.2.0/ez-environment-desert.png" alt="Generated desert biome" width="100%"> |
+| **Meadow** | **Rocky** |
+| <img src="https://github.com/kizergraphics/EZ-Environment/releases/download/v1.2.0/ez-environment-meadow.png" alt="Generated meadow biome" width="100%"> | <img src="https://github.com/kizergraphics/EZ-Environment/releases/download/v1.2.0/ez-environment-rocky.png" alt="Generated rocky biome" width="100%"> |
 
-## Features
+Each biome is a starting point rather than a fixed scene. The world seed, terrain profile, scatter layers, authored species, lighting, fog, and wind remain editable.
 
-- **Four authoring modes** — dedicated studios for trees, plants, rocks, and full environments, each with live preview and preset libraries.
-- **Biome environments** — meadow, forest, desert, and rocky biomes scatter authored species over procedural terrain with ground-level and overview camera bookmarks.
-- **Photographed bark everywhere** — every stem-bearing plant archetype (shrubs, ferns, weeds, ground cover, flowers, cacti, saplings, and more) renders with real PBR bark textures, selectable per-plant from 11 bark designs with tint control.
-- **Automatic PBR exports** — generated assets receive color, normal, and roughness textures on every LOD, including saved custom species. GLBs embed their textures; ZIP packs also include reusable texture files, source records, and a material catalog.
-- **Unity handoff** — the included importer creates assigned, editable materials shared across LODs and instances. See [Unity import](unity/README.md).
-- **PNG capture** — export viewport, 1080p, or 4K renders straight from the app.
-- **Projects** — save and reload full studio projects; older saves migrate automatically.
+## Materials and detail
 
-See [the user guide](docs/USER_GUIDE.md), [milestones](ROADMAP.md), [release notes](docs/RELEASE_NOTES.md), [desktop build instructions](docs/desktop.md), and [material sources](src/app/materials/README.md) for texture provenance.
+| Photorealistic meadow preview | Fern authoring | Bark close-up |
+|---|---|---|
+| <img src="https://github.com/kizergraphics/EZ-Environment/releases/download/v1.2.0/ez-environment-meadow-photorealistic.png" alt="Photorealistic meadow preview with authored tree" width="100%"> | <img src="https://github.com/kizergraphics/EZ-Environment/releases/download/v1.2.0/ez-environment-fern-studio.png" alt="Fern being authored in Plant Studio" width="100%"> | <img src="https://github.com/kizergraphics/EZ-Environment/releases/download/v1.2.0/ez-environment-bark-closeup.png" alt="Close-up of textured plant stems and leaves" width="100%"> |
+
+Surface choices are part of the regenerable asset definition. The same material intent is carried into the full-detail mesh and each lower-detail export.
+
+## Download and run
+
+1. Download `EZ-Environment-1.2.0-Portable.exe` from the **[latest release](https://github.com/kizergraphics/EZ-Environment/releases/latest)**.
+2. Place it in a writable folder and open it. There is no installer.
+3. Keep the generated `EZ Environment Data` folder beside the executable if you move the app; it contains the local workspace and preferences.
+4. Use **Save project** to create portable JSON backups wherever you choose.
+
+The executable is currently unsigned, so Windows may display an unknown-publisher warning. EZ Environment does not add an updater, startup service, or remote connection, and it does not require Node.js, Unity, or an Internet connection to run.
+
+## Authoring workflow
+
+1. Choose a preset or form in the Tree, Plant, or Rock studio.
+2. Set a seed and tune shape, structure, surface, and LOD controls while orbiting the live preview.
+3. Add authored assets to Environment and compose a biome with procedural or painted placement.
+4. Save the project, capture a PNG, export an individual GLB, or build an asset/environment pack.
+
+Projects preserve authoring definitions, placement, painted masks, appearance, lighting, and per-mode cameras. Older project files are migrated when opened.
+
+## Export options
+
+| Output | Best for | Includes |
+|---|---|---|
+| Preset JSON | Recreating or sharing an authored asset | Seed and editable generator settings |
+| Standalone GLB | A single tree, plant, or rock | Geometry plus embedded PBR textures |
+| Asset + LOD pack | Engine-ready individual assets | Three GLBs, preset, manifest, reusable textures, and material catalog |
+| Environment pack | Reconstructing a full authored scene | Terrain, species assets, explicit LODs, placements, materials, and manifest |
+| PNG capture | Review and presentation | Viewport, 1080p, or 4K render |
+
+Environment packs retain authored placements even when preview quality or camera culling hides instances in the editor. Optional instanced and baked-chunk GLBs are available for pipelines that support them.
+
+## Unity workflow
+
+The repository includes a Unity importer that rebuilds an exported pack with shared meshes, editable materials, `LODGroup`s, transforms, tint, and supported collider metadata.
+
+1. Install Unity's `com.unity.cloud.gltfast` package.
+2. Copy the [`unity`](unity) directory into `Assets/EZEnvironment` in your project.
+3. Extract an EZ Environment pack.
+4. Choose **Tools → EZ Environment → Import Extracted Pack...** and select its `manifest.json`.
+
+See the [complete Unity import guide](unity/README.md) for render-pipeline notes, coordinate conversion, wind metadata, collider behavior, and validation details.
 
 ## Run from source
 
+Requirements: a current Node.js release supported by the pinned dependencies and npm.
+
 ```bash
+git clone https://github.com/kizergraphics/EZ-Environment.git
+cd EZ-Environment
 npm install
-npm run app        # build the library + launch the dev server
+npm run app
 ```
 
-Portable desktop build:
+Useful commands:
 
-```bash
-npm run desktop:pack   # outputs release/EZ-Environment-<version>-Portable.exe
-```
+| Command | Purpose |
+|---|---|
+| `npm run dev` | Start the browser app with Vite |
+| `npm run app` | Build the reusable tree library and start the app |
+| `npm run build:app` | Build the production web application |
+| `npm run build:lib` | Build the reusable EZ-Tree-compatible library |
+| `npm run desktop:dev` | Run the Electron desktop shell in development |
+| `npm run desktop:pack` | Create the portable Windows x64 executable |
+| `node --test tests/*.test.js` | Run the core test suite |
+| `npm run test:desktop` | Run desktop security tests |
 
-Tests:
+Generated builds, release artifacts, local profiles, screenshots, prompts, logs, and test evidence are intentionally excluded from source control. Packaged executables are distributed only through GitHub Releases.
 
-```bash
-node --test tests/*.test.js
-npm run test:desktop
-```
+## Documentation
 
----
+- [User guide](docs/USER_GUIDE.md) — navigation, authoring, environments, saves, exports, portability, and practical limits.
+- [Release notes](docs/RELEASE_NOTES.md) — delivered features and verification history.
+- [Desktop build and security](docs/desktop.md) — packaging, offline resources, and runtime boundaries.
+- [Unity importer](unity/README.md) — importing exported packs into Unity.
+- [Material sources](src/app/materials/README.md) — texture provenance and material notes.
+- [Roadmap](ROADMAP.md) and [changelog](CHANGELOG.md) — project direction and version history.
+- [Security policy](SECURITY.md) — private vulnerability reporting.
 
-# The EZ-Tree library
+## Scope and practical limits
 
-Underneath the studio sits the standalone EZ-Tree generation library, usable in your own Three.js app:
+EZ Environment is a bounded scene authoring tool, not an infinite terrain engine. Authoring radius is 16–256 meters, and dense worlds with steep terrain or many detailed custom species can exceed a machine's comfortable preview budget. Start at Medium quality and increase complexity incrementally.
 
-```bash
-npm i @dgreenheck/ez-tree
-```
+Exports contain static geometry and standard material fallbacks. A receiving engine is responsible for its own lighting, sky, fog, shadows, ambient occlusion, and compatible vegetation wind shader. Botanical detail maps are artistically authored rather than measured scans.
 
-```js
-// Create new instance
-const tree = new Tree();
+## Credits and license
 
-// Set parameters
-tree.options.seed = 12345;
-tree.options.trunk.length = 20;
-tree.options.branch.levels = 3;
+EZ Environment is released under the [MIT License](LICENSE). Its tree-generation core originates from [Daniel Greenheck's EZ-Tree](https://github.com/dgreenheck/ez-tree), also released under MIT. Bundled third-party code and asset notices are included with the desktop application and in the relevant source directories.
 
-// Generate tree and add to your Three.js scene
-tree.generate();
-scene.add(tree);
-```
-
-Any time the tree parameters are changed, you must call `generate()` to regenerate the geometry.
-
-## Levels of Detail (LODs)
-
-For scenes with many trees, `generateLODs()` builds the tree at multiple levels of detail hosted in a `THREE.LOD` object inside the tree group. The renderer automatically switches levels based on camera distance. All levels are meshed from the same skeleton, so the tree's silhouette stays consistent across switches — distant levels just use fewer ring segments and fewer (but larger) leaves.
-
-```js
-const tree = new Tree();
-tree.loadPreset('Ash Medium');
-tree.generateLODs(); // instead of generate()
-scene.add(tree);
-```
-
-The default levels (`Tree.defaultLODLevels`) switch at 100 and 250 units, reducing to roughly 40% and 20% of the full triangle count. You can pass custom levels:
-
-```js
-tree.generateLODs([
-  { distance: 0, detail: {} }, // full detail
-  {
-    distance: 80,
-    hysteresis: 0.05,
-    detail: {
-      sectionStride: 3,    // sample every 3rd ring along each branch
-      segmentFactor: 0.75, // reduce radial segments to 75% (min 3)
-      leafStride: 2,       // keep every 2nd leaf...
-      leafScale: 1.4,      // ...enlarged to preserve canopy coverage
-      billboard: 'single', // drop the second crossed leaf quad
-    },
-  },
-]);
-```
-
-All LOD levels share one bark material and one leaf material, so `tree.update(time)` animates wind at every level. Calling `generate()` afterwards tears the LOD down and restores the single full-detail mesh pair (note that exporting a tree generated with `generateLODs()` to GLB will include every level).
-
-If you have your own LOD or instancing system, `tree.createGeometry(detail)` returns raw `{ branches, leaves }` `BufferGeometry` pairs at any detail level without touching the tree's own meshes.
-
-## Tree Parameters
-
-The `TreeOptions` class defines an options object that controls various parameters of a procedurally generated tree. Each property of this object allows for customization of the tree's appearance, including bark, branches, and leaves. Below is a detailed explanation of each property of the `TreeOptions` object.
-
-### General Properties
-
-- **`seed`**: Sets the initial value for random generation, ensuring consistent tree generation when using the same seed.
-- **`type`**: Defines the type of the tree, which can be set to one of the options from the `TreeType` enumeration (e.g., `TreeType.Deciduous`).
-
-### Bark Parameters
-
-The `bark` object controls the appearance and properties of the tree trunk.
-
-- **`type`**: Specifies the type of bark texture to use, selected from the `BarkType` enumeration (e.g., `BarkType.Oak`).
-- **`tint`**: Determines the color tint applied to the bark, defined as a hexadecimal color value (e.g., `0xffffff` for white).
-- **`flatShading`**: Boolean property indicating whether to use flat shading (`true`) or smooth shading (`false`) for the bark.
-- **`textured`**: Boolean value that indicates if a texture is applied to the bark (`true` or `false`).
-- **`textureScale`**: Controls the scale of the bark texture in both the `x` and `y` axes. It is an object with properties `x` and `y` to define the scaling factors.
-
-### Branch Parameters
-
-The `branch` object defines parameters for the trunk and branch levels of the tree.
-
-- **`levels`**: Number of recursive branch levels. Setting this to `0` creates only the trunk, while higher values add more branches.
-- **`angle`**: Defines the angle, in degrees, at which child branches grow relative to their parent branch. This is specified separately for each level.
-- **`children`**: Specifies the number of child branches at each level, with the index (`0`, `1`, `2`, etc.) representing the level.
-- **`force`**: Represents an external directional force encouraging tree growth, defined by `direction` (a vector object `{ x, y, z }`) and `strength` (a numeric value).
-- **`gnarliness`**: Defines how twisted or curled each branch level should be, specified for each level.
-- **`length`**: Length of the branches at each level. This is an object with keys representing each level.
-- **`radius`**: Radius (or thickness) of the branches at each level.
-- **`sections`**: Number of segments along the length of each branch level, controlling the resolution of the branch mesh.
-- **`segments`**: Number of radial segments that make up each branch, with a higher value resulting in a smoother cylinder.
-- **`start`**: Specifies where along the parent branch (as a fraction from `0` to `1`) the child branches should start forming.
-- **`taper`**: Controls the tapering of the branches at each level. A value between `0` and `1` defines the reduction in radius from base to tip.
-- **`twist`**: Defines the amount of twisting applied to each branch level.
-
-### Leaf Parameters
-
-The `leaves` object defines properties that control the appearance and placement of leaves.
-
-- **`type`**: Specifies the type of leaf texture, selected from the `LeafType` enumeration (e.g., `LeafType.Oak`).
-- **`billboard`**: Defines how leaves are rendered. The `Billboard` enumeration can be set to `Single` or `Double` to indicate single or perpendicular double-sided leaves.
-- **`angle`**: Defines the angle of the leaves relative to the parent branch, in degrees.
-- **`count`**: Number of leaves to generate.
-- **`start`**: Specifies where along the length of the branch (as a value between `0` and `1`) leaves should start growing.
-- **`size`**: Size of the leaves, represented as a numeric value.
-- **`sizeVariance`**: Specifies how much variance in size each leaf instance should have, making the leaves look more natural.
-- **`tint`**: Tint color applied to the leaves, defined as a hexadecimal color value (e.g., `0xffffff` for white).
-- **`alphaTest`**: Sets the alpha threshold for leaf transparency, controlling the transparency of the leaf textures.
+If your goal is the original focused Three.js tree generator, presets, examples, or upstream package documentation, visit **[dgreenheck/ez-tree](https://github.com/dgreenheck/ez-tree)**.
