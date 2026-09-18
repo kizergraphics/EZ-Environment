@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 const output=path.resolve('artifacts/wood-surfaces');await mkdir(output,{recursive:true});
+const threeModuleUrl='/@fs/'+path.resolve('node_modules/three/build/three.module.js').replaceAll('\\','/');
+const gltfLoaderUrl='/@fs/'+path.resolve('node_modules/three/examples/jsm/loaders/GLTFLoader.js').replaceAll('\\','/');
 const browser=await chromium.launch({channel:'msedge',headless:true});
 const page=await browser.newPage({viewport:{width:1200,height:900}});page.setDefaultTimeout(120000);
 const errors=[];page.on('pageerror',e=>errors.push(e.message));
@@ -10,15 +12,15 @@ try {
   await page.goto(process.env.EZ_TEST_URL||'http://127.0.0.1:5194');await page.waitForFunction(()=>window.__EZ_ENVIRONMENT__?.ready);
   const results=[];
   for(const kind of ['deadwood','fallen_log','trellis']) {
-    const result=await page.evaluate(async kind=>{
-      const THREE=await import('/@fs/REDACTED_REPOSITORY_ROOT/node_modules/three/build/three.module.js');
+    const result=await page.evaluate(async ({kind,threeModuleUrl,gltfLoaderUrl})=>{
+      const THREE=await import(threeModuleUrl);
       const {generatePlant,createPlantDefinition}=await import('/generators/plants.js');
       const {extraSpecies}=await import('/environment/biome-species.js');
       const {prepareAssetMaterials,assertPbrReady}=await import('/materials/pbr.js');
       const {loadWoodMaps}=await import('/materials/wood-surface.js');
       const {exportGLB}=await import('/export/exporters.js');
       const {readGLB}=await import('/export/material-catalog.js');
-      const {GLTFLoader}=await import('/@fs/REDACTED_REPOSITORY_ROOT/node_modules/three/examples/jsm/loaders/GLTFLoader.js');
+      const {GLTFLoader}=await import(gltfLoaderUrl);
       let asset;
       if(kind==='trellis') {
         const tree=window.__EZ_ENVIRONMENT__.tree;
@@ -58,7 +60,7 @@ try {
       const bounds=new THREE.Box3().setFromObject(scene),center=bounds.getCenter(new THREE.Vector3());
       const camera=new THREE.PerspectiveCamera(38,4/3,.01,100);camera.position.copy(center).add(new THREE.Vector3(kind==='trellis'?3.3:3.2,kind==='trellis'?1.8:1.35,kind==='trellis'?4.5:2.5));camera.lookAt(center);renderer.render(scene,camera);
       return {kind,lods:asset.lods.length,families:[...families],capTriangles,roundTripMeshes};
-    },kind);
+    },{kind,threeModuleUrl,gltfLoaderUrl});
     await page.screenshot({path:path.join(output,`${kind}-close.png`)});results.push(result);console.log(JSON.stringify(result));
   }
   assert.deepEqual(errors,[]);await writeFile(path.join(output,'report.json'),JSON.stringify({passed:true,results,errors},null,2));

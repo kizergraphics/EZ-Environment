@@ -2,6 +2,7 @@ import { chromium } from '@playwright/test';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 const output=path.resolve('artifacts/surface-detail');await mkdir(output,{recursive:true});
+const gltfLoaderUrl='/@fs/'+path.resolve('node_modules/three/examples/jsm/loaders/GLTFLoader.js').replaceAll('\\','/');
 const browser=await chromium.launch({channel:'msedge',headless:true});
 const page=await browser.newPage();const errors=[];page.on('pageerror',e=>errors.push(e.message));
 try {
@@ -10,12 +11,12 @@ try {
   const extras=await page.evaluate(async()=>{const presets=new Set((await import('/generators/catalog.js')).ASSET_PRESETS.map(p=>p.id));return [...window.__EZ_ENVIRONMENT__.environment.registry.keys()].filter(id=>!presets.has(id)).map(id=>'legacy:'+id);});
   const results=process.env.EXTRAS_ONLY?JSON.parse(await readFile(path.join(output,'export-report.json'),'utf8')).results.filter(r=>!r.id.startsWith('legacy:')&&r.id!=='terrain'):[];
   for(const id of [...(process.env.EXTRAS_ONLY?[]:ids),...extras,'terrain']){
-    const result=await page.evaluate(async id=>{
+    const result=await page.evaluate(async ({id,gltfLoaderUrl})=>{
       const {ASSET_PRESETS}=await import('/generators/catalog.js');
       const plants=await import('/generators/plants.js'),rocks=await import('/generators/rocks.js');
       const {exportAssetPack,exportGLB}=await import('/export/exporters.js');
       const {readGLB,validateMaterialCatalog,appendMaterialCatalog}=await import('/export/material-catalog.js');
-      const {GLTFLoader}=await import('/@fs/REDACTED_REPOSITORY_ROOT/node_modules/three/examples/jsm/loaders/GLTFLoader.js');
+      const {GLTFLoader}=await import(gltfLoaderUrl);
       let asset;
       if(id.startsWith('legacy:')){asset={...window.__EZ_ENVIRONMENT__.environment.registry.get(id.split(':')[1]),dispose(){}};}
       else if(id==='terrain'){
@@ -42,7 +43,7 @@ try {
         }
         return {id,lods,materials,images,roundTripMeshes,companions:catalog.textures.length,failures};
       }finally {asset.dispose();}
-    },id).catch(e=>({id,failures:[e.message]}));
+    },{id,gltfLoaderUrl}).catch(e=>({id,failures:[e.message]}));
     results.push(result);console.log(JSON.stringify(result));
     await writeFile(path.join(output,'export-report.json'),JSON.stringify({passed:results.every(r=>!r.failures.length)&&!errors.length,results,errors},null,2));
   }
