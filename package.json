@@ -50,7 +50,7 @@
     "@playwright/test": "^1.62.1",
     "@typescript/typescript6": "^6.0.2",
     "@types/three": "^0.169.0",
-    "electron": "^44.2.0",
+    "electron": "^44.3.0",
     "electron-builder": "^26.15.3",
     "prettier": "3.3.3",
     "three": "^0.167.x",
