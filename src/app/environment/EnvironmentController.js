@@ -209,9 +209,15 @@ export class EnvironmentController extends THREE.Group {
       const asset=this.registry.get(id);if(!asset)continue;
       const palette=asset.definition.archetype==='grass'&&asset.definition.height!==undefined?new THREE.Color(asset.definition.leafColor):null;
       for(const lod of asset.lods)for(const part of collectMeshes(lod)){
-        if (part.material.userData.pbrFamily && part.material.userData.pbrFamily !== 'foliage') continue;
-        part.material.color.copy(color);
-        if(palette&&!part.material.userData.pbrFamily)part.material.color.setRGB(color.r/Math.max(.001,palette.r),color.g/Math.max(.001,palette.g),color.b/Math.max(.001,palette.b));
+        const family=part.material.userData.pbrFamily;
+        if (family && !['foliage','grassCards'].includes(family)) continue;
+        const baseline=family==='grassCards'?new THREE.Color(part.material.userData.pbrBaselineTint||'#698446'):palette&&!family?palette:null;
+        if(baseline)part.material.color.setRGB(
+          Math.min(1,color.r/Math.max(.001,baseline.r)),
+          Math.min(1,color.g/Math.max(.001,baseline.g)),
+          Math.min(1,color.b/Math.max(.001,baseline.b)),
+        );
+        else part.material.color.copy(color);
         const entry=this.lod.sources.get(part.material);if(entry)for(const binding of entry.levels.values())binding.material.color.copy(part.material.color);
       }
     }

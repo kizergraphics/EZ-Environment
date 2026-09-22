@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { loadLeafSurface, plantDetailMaps } from './plant-surface.js';
+import { loadGrassCardSurface, loadLeafSurface, plantDetailMaps } from './plant-surface.js';
 import { improveRockMaps } from './rock-surface.js';
 import { loadWoodMaps } from './wood-surface.js';
 
@@ -49,6 +49,7 @@ const hasPbrMaps=material=>['map','normalMap','roughnessMap'].every(slot=>{
 function abort(signal){if(signal?.aborted)throw signal.reason||new DOMException('Material preparation cancelled.','AbortError');}
 export async function loadPbrFamily(id,{signal,variant}={}) {
   abort(signal);
+  if(id==='grassCards')return typeof document==='undefined'?getBotanicalMaps('foliage'):loadGrassCardSurface(variant);
   if(['wood','endgrain'].includes(id))return loadWoodMaps(id);
   if(['foliage','stem','petal','pollen'].includes(id)) {
     if (typeof document === 'undefined') return getBotanicalMaps(id);
@@ -80,18 +81,22 @@ export async function loadPbrFamily(id,{signal,variant}={}) {
 export async function prepareAssetMaterials(asset,{signal}={}) {
   abort(signal);const materials=new Set();
   for(const root of asset.lods||[asset.object3D])root?.traverse(o=>{for(const m of Array.isArray(o.material)?o.material:[o.material])if(m?.userData.pbrFamily&&!(m.userData.pbrReady&&hasPbrMaps(m)))materials.add(m);});
-  const loaded=await Promise.all([...materials].map(async material=>({material,maps:material.userData.pbrPreserveColorMap && ['foliage','petal'].includes(material.userData.pbrFamily) ? getBotanicalMaps(material.userData.pbrFamily) : await loadPbrFamily(material.userData.pbrFamily,{signal,variant:material.userData.pbrVariant})})));abort(signal);
+  const loaded=await Promise.all([...materials].map(async material=>({material,maps:material.userData.pbrPreserveColorMap && ['foliage','petal'].includes(material.userData.pbrFamily) ? getBotanicalMaps(material.userData.pbrFamily) : await loadPbrFamily(material.userData.pbrFamily,{signal,variant:material.userData.pbrLeafTexture??material.userData.pbrVariant})})));abort(signal);
   for(const {material,maps}of loaded){
     if(material.userData.pbrReady&&hasPbrMaps(material))continue;
     // Separately parsed worker LODs can share the same structured-cloned metadata
     // object while owning different materials. Readiness belongs to each material.
     material.userData={...material.userData};
+    if(['foliage','grassCards'].includes(material.userData.pbrFamily)&&material.userData.pbrBaselineTint){
+      const baseline=new THREE.Color(material.userData.pbrBaselineTint);
+      material.color.setRGB(Math.min(1,material.color.r/Math.max(.0001,baseline.r)),Math.min(1,material.color.g/Math.max(.0001,baseline.g)),Math.min(1,material.color.b/Math.max(.0001,baseline.b)));
+    }
     const owned=[];
     for(const [slot,source]of Object.entries(maps)){
       if(slot==='map'&&material.map&&material.userData.pbrPreserveColorMap)continue;
       const texture=source.clone();texture.repeat.setScalar(material.userData.pbrTextureScale||1);texture.needsUpdate=true;material[slot]=texture;owned.push(texture);
     }
-    material.metalness=0;material.normalScale.setScalar(material.userData.pbrNormalScale ?? (material.userData.pbrFamily==='foliage'?.65:material.userData.pbrFamily==='bark'?.8:material.userData.pbrFamily==='stone'?.75:.5));material.userData.pbrReady=true;material.needsUpdate=true;
+    material.metalness=0;material.normalScale.setScalar(material.userData.pbrNormalScale ?? (material.userData.pbrFamily==='grassCards'?.28:material.userData.pbrFamily==='foliage'?.65:material.userData.pbrFamily==='bark'?.8:material.userData.pbrFamily==='stone'?.75:.5));material.userData.pbrReady=true;material.needsUpdate=true;
     const dispose=()=>{owned.forEach(t=>t.dispose());material.removeEventListener('dispose',dispose);};material.addEventListener('dispose',dispose);
   }
   return asset;

@@ -53,3 +53,14 @@ test('worker LODs sharing serialized metadata each receive their own ready mater
   assert.notEqual(lods[0].children[0].material.map,lods[1].children[0].material.map);
   source.dispose();lods.forEach(lod=>lod.traverse(o=>{o.geometry?.dispose();o.material?.dispose();}));
 });
+
+test('full-color grass atlases use a baseline tint instead of being darkened twice',async()=>{
+  const asset=generatePlant(createPlantDefinition('grass',{grassRepresentation:'cards'}));
+  const material=asset.object3D.children[0].material;
+  assert.equal(material.userData.pbrBaselineTint,'#698446');
+  assert.equal(material.color.getHexString(),'698446');
+  await prepareAssetMaterials(asset);
+  assert.equal(material.color.getHexString(),'ffffff');
+  asset.lods.forEach(assertPbrReady);
+  asset.dispose();
+});

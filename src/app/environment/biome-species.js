@@ -90,7 +90,7 @@ export function extraSpecies(kind){
       shapeProfile:'ledgestone',
     }),{variants:true});
   }
-  if(kind==='dry_shrub')return generatePlant(createPlantDefinition('shrub',{height:.8,width:1.1,branches:4,stemCount:3,density:.35,leafSize:.055,leafColor:'#8e8b64',barkType:'Bark014'}));
+  if(kind==='dry_shrub')return generatePlant(createPlantDefinition('shrub',{height:.8,width:1.1,branches:4,stemCount:3,density:.35,leafSize:.055,leafColor:'#8e8b64',leafTexture:'dry-shrub-v1',barkType:'Bark014'}));
   if(kind==='cactus')return geometricAsset(kind,level=>{
     const n=[12,8,5][level],stem=new THREE.CapsuleGeometry(.18,1.9,3,n);stem.translate(0,1.12,0);const pieces=[stem];
     for(const side of [-1,1]){
@@ -117,7 +117,7 @@ export function selectAssetAppearance(asset, options = {}) {
 export async function addFoliageVariants(registry){
   if(typeof document==='undefined')return;
   const loader=new THREE.TextureLoader();
-  const specs=[['fern','fern-frond',1.4,1.05,6],['dry_shrub','dry-shrub',1.2,.95,3],['grass','meadow-foliage',1.35,1.05,3],['grass_tall','meadow-foliage',1.3,1.8,3],['shrub','broadleaf',1.6,1.4,5],['bush','broadleaf',2,1.1,5]];
+  const specs=[['fern','fern-frond',1.4,1.05,6]];
   const textures=new Map(), created=[];
   try{
     for(const [id,file,width,height,count] of specs){

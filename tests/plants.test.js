@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
 import { createHash } from 'node:crypto';
-import { PLANT_ARCHETYPES, PLANT_PRESETS, LEAF_DESIGNS, PLANT_BARK_TYPES, createPlantDefinition, generatePlant } from '../src/app/generators/plants.js';
+import { PLANT_ARCHETYPES, PLANT_PRESETS, LEAF_DESIGNS, LEAF_TEXTURES, PLANT_BARK_TYPES, createPlantDefinition, generatePlant } from '../src/app/generators/plants.js';
 
 function geometryHash(asset) {
   const hash = createHash('sha256');
@@ -148,6 +148,47 @@ test('leaf and bark designs are serialized, legacy leafShape maps forward, and s
   assert.equal(stems.material.userData.pbrFamily, 'bark');
   assert.equal(stems.material.userData.pbrVariant, 'Bark014');
   shrub.dispose();
+});
+
+test('shrub presets keep distinct compatible texture identities and four stable atlas cells', () => {
+  const expected = new Map([
+    ['woodland-shrub', 'woodland-shrub-v1'], ['boxwood', 'boxwood-v1'],
+    ['meadow-bush', 'meadow-bush-v1'], ['copper-bush', 'copper-bush-v1'],
+    ['bush-1', 'bush-1-v1'], ['bush-2', 'bush-2-v1'], ['bush-3', 'bush-3-v1'],
+    ['berry-thicket', 'berry-thicket-v1'], ['sagebrush', 'sagebrush-v1'],
+    ['heather-cushion', 'heather-cushion-v1'],
+  ]);
+  assert.ok(LEAF_TEXTURES.length >= expected.size + 7);
+  assert.equal(new Set(expected.values()).size, expected.size);
+  for (const [id, leafTexture] of expected) {
+    const preset = PLANT_PRESETS.find(entry => entry.id === id);
+    assert.equal(preset?.definition.leafTexture, leafTexture, id);
+  }
+  assert.throws(() => createPlantDefinition('shrub', { leafDesign:'lobed', leafTexture:'boxwood-v1' }), /not compatible/);
+  const asset = generatePlant(PLANT_PRESETS.find(entry => entry.id === 'boxwood').definition);
+  const leaves = asset.object3D.children.find(mesh => mesh.userData.materialSlot === 'leaves');
+  assert.equal(leaves.material.userData.pbrVariant, 'oval');
+  assert.equal(leaves.material.userData.pbrLeafTexture, 'boxwood-v1');
+  const quadrants = new Set();
+  const uv = leaves.geometry.attributes.uv;
+  for (let index = 0; index < uv.count; index++) quadrants.add(`${Math.floor(uv.getX(index) * 2)},${Math.floor(uv.getY(index) * 2)}`);
+  assert.deepEqual([...quadrants].sort(), ['0,0','0,1','1,0','1,1']);
+  asset.dispose();
+});
+
+test('grass card layouts preserve the requested 6/8/10/12 triangle silhouettes', () => {
+  const expected = {
+    sparseCross:[6,4,2], staggeredStar:[8,6,4], naturalOffset:[10,6,4], denseTuft:[12,8,4],
+  };
+  for (const [cardLayout, triangles] of Object.entries(expected)) {
+    const definition = createPlantDefinition('grass', { seed:91, cardLayout, grassRepresentation:'cards' });
+    const first = generatePlant(definition), second = generatePlant(structuredClone(definition));
+    assert.deepEqual(first.lods.map(lod => lod.userData.triangles), triangles, cardLayout);
+    assert.equal(first.lods.every(lod => lod.children.length === 1), true);
+    assert.equal(first.lods.every(lod => lod.children[0].geometry.userData.grassCardLayout === cardLayout), true);
+    assert.equal(geometryHash(first), geometryHash(second));
+    first.dispose(); second.dispose();
+  }
 });
 
 test('woody presets expose natural bark and retain authored tints', () => {

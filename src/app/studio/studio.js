@@ -1,5 +1,6 @@
 import * as THREE from 'three';
-import { PLANT_PRESETS, PLANT_ARCHETYPES, LEAF_DESIGNS, PLANT_BARK_TYPES, createPlantDefinition } from '../generators/plants.js';
+import { PLANT_PRESETS, PLANT_ARCHETYPES, LEAF_DESIGNS, PLANT_BARK_TYPES, GRASS_CARD_LAYOUTS, GRASS_CARD_ATLASES, createPlantDefinition } from '../generators/plants.js';
+import { leafTextureInfo, leafTexturesForDesign, legacyLeafTexture } from '../generators/leaf-textures.js';
 import { ROCK_PRESETS, ROCK_ARCHETYPES, ROCK_SHAPE_PROFILES, createRockDefinition } from '../generators/rocks.js';
 import { PRESET_GROUPS, assetLayer, layerSpecies } from '../generators/catalog.js';
 import { GenerationClient } from './generation.js';
@@ -14,6 +15,8 @@ import { awaitTextureReadiness } from '../materials/readiness.js';
 import { BIOMES, applyBiome } from '../environment/biomes.js';
 import { terrainHeight } from '../environment/placement.js';
 import { validateCameras, validateCameraState, validateLastAuthoredMode, chooseGroundPosition } from './viewport.js';
+import { GrassCardEditor } from './grass-card-editor.js';
+import { validateGrassCardEdits } from '../generators/grass-cards.js';
 
 const STORAGE='ez-environment-project-v2';
 const title=s=>s.replace(/([A-Z])/g,' $1').replace(/^./,c=>c.toUpperCase());
@@ -47,6 +50,7 @@ export class Studio {
     Object.assign(this,context);this.mode='tree';this.lastAuthoredMode=null;this.assetMode=null;this.lod=0;this.asset=null;this.client=new GenerationClient();this.pending=null;this.previewWind=new WindController(this.environment.options.wind);
     this.definitions={plant:createPlantDefinition('shrub'),rock:createRockDefinition('rock')};this.history=[];this.future=[];this.cameras=validateCameras();this.cleanView=false;
     this.viewportGroup=new THREE.Group();this.scene.add(this.viewportGroup);
+    this.grassEditor=new GrassCardEditor(this);
     this.statusNode=document.getElementById('studio-status');this.panel=document.getElementById('studio-panel');
     const nav=document.getElementById('mode-nav');
     this.navButtons=[];
@@ -199,6 +203,7 @@ export class Studio {
     for(const l of asset.lods)l.traverse(o=>{if(o.isMesh){o.castShadow=mode!=='plant';o.receiveShadow=true;if(mode==='plant')this.previewWind.attach(o.material,asset.definition.height,.08,!!o.geometry.attributes.windWeight);}});
     this.syncPreview();
     if(fit)this.fit(this.mode==='environment');
+    if(this.grassEditor.editing)this.grassEditor.refreshPanel();else this.grassEditor.sync();
     this.updateAssetStats();this.persist();this.status(`${title(asset.definition.archetype)} ready · ${asset.ms.toFixed(0)} ms generation${asset.placement?.shortfall?` · ${asset.placement.shortfall} cluster members could not fit`:''}`);
   }
   updateAssetStats(){
@@ -207,7 +212,8 @@ export class Studio {
   }
   snapshot(mode=this.mode){return mode==='environment'?{mode,options:structuredClone(this.environment.options)}:{mode,definition:structuredClone(this.definitions[mode])};}
   remember(snapshot=this.snapshot()){this.history.push(snapshot);if(this.history.length>60)this.history.shift();this.future=[];this.updateViewportToolbar();}
-  change(key,value){this.remember();this.definitions[this.mode][key]=value;if(this.mode==='rock'&&key==='shapeProfile')this.definitions.rock.version=2;const preset=this.panel.querySelector('select[aria-label="Preset"]');if(preset)preset.value='';clearTimeout(this.debounce);this.debounce=setTimeout(()=>this.generate().catch(e=>this.status(e.message,true)),100);}
+  change(key,value){this.changeMany({[key]:value});}
+  changeMany(values){this.remember();Object.assign(this.definitions[this.mode],values);if(this.mode==='rock'&&Object.hasOwn(values,'shapeProfile'))this.definitions.rock.version=2;const preset=this.panel.querySelector('select[aria-label="Preset"]');if(preset)preset.value='';clearTimeout(this.debounce);this.debounce=setTimeout(()=>this.generate().catch(e=>this.status(e.message,true)),100);}
   async restoreSnapshot(snapshot){
     if(snapshot.mode==='environment'){await this.environment.setOptions(snapshot.options);this.syncPreview();this.syncSceneAppearance?.();}
     else this.definitions[snapshot.mode]=structuredClone(snapshot.definition);
@@ -221,7 +227,7 @@ export class Studio {
   async undo(){return this.travelHistory(this.history,this.future);}
   async redo(){return this.travelHistory(this.future,this.history);}
   renderPanel(){
-    this.panel.replaceChildren();if(this.mode==='tree')return;
+    this.panel.replaceChildren();this.grassEditor.sync();if(this.mode==='tree')return;
     const header=el('div','studio-heading');header.append(el('p','eyebrow',this.mode==='environment'?'SCENE COMPOSITION':'PROCEDURAL AUTHORING'),el('h1','',this.mode==='environment'?'Environment':`${title(this.mode)} Studio`));
     header.append(el('p','studio-description',this.mode==='plant'?'Shape living forms, from low ground cover to branching shrubs.':this.mode==='rock'?'Sculpt pebbles, stones, boulders, and natural clusters.':'Compose a seeded world with layered vegetation and stone.'));this.panel.append(header);
     const body=el('div','studio-scroll');this.panel.append(body);
@@ -229,9 +235,9 @@ export class Studio {
     const mode=this.mode,d=this.definitions[mode],presets=mode==='plant'?PLANT_PRESETS:ROCK_PRESETS;
     const p=section('Starting point');body.append(p.element);
     const selected=presets.find(p=>JSON.stringify(p.definition)===JSON.stringify(d))?.id||'';
-    p.body.append(select('Preset',[['','Custom'],...PRESET_GROUPS.flatMap(g=>presets.filter(p=>p.group===g).map(p=>[p.id,p.name,g]))],selected,async id=>{if(!id)return;this.remember();this.definitions[mode]=structuredClone(presets.find(p=>p.id===id).definition);this.renderPanel();await this.generate(true);}));
+    p.body.append(select('Preset',[['','Custom'],...PRESET_GROUPS.flatMap(g=>presets.filter(p=>p.group===g).map(p=>[p.id,p.name,g]))],selected,async id=>{if(!id)return;this.remember();this.definitions[mode]=this.grassEditor.withSavedLayouts(structuredClone(presets.find(p=>p.id===id).definition));this.renderPanel();await this.generate(true);}));
     const types=mode==='plant'?PLANT_ARCHETYPES:ROCK_ARCHETYPES;
-    p.body.append(select('Form',types.map(t=>[t,title(t)]),d.archetype,async type=>{this.definitions[mode]=(mode==='plant'?createPlantDefinition:createRockDefinition)(type);this.renderPanel();await this.generate(true);}));
+    p.body.append(select('Form',types.map(t=>[t,title(t)]),d.archetype,async type=>{this.definitions[mode]=this.grassEditor.withSavedLayouts((mode==='plant'?createPlantDefinition:createRockDefinition)(type));this.renderPanel();await this.generate(true);}));
     p.body.append(field('Seed',d.seed,0,4294967295,1,v=>this.change('seed',v)));
     p.body.append(action('New variation',async()=>{this.definitions[mode].seed=crypto.getRandomValues(new Uint32Array(1))[0];this.renderPanel();await this.generate();}));
     const form=section('Shape & structure');body.append(form.element);
@@ -241,12 +247,20 @@ export class Studio {
       if(['grass','coniferSapling','cactus','succulent','cushion','deadwood'].includes(d.archetype)){
         if(d.archetype==='cactus')add('armCount','Arms',0,6,1);
         else {
-          if(d.archetype!=='deadwood'&&d.archetype!=='coniferSapling')add('stemCount',d.archetype==='succulent'?'Leaves per ring':d.archetype==='cushion'?'Crowns':'Blades',1,16,1);
+          if(d.archetype!=='deadwood'&&d.archetype!=='coniferSapling'&&!(d.archetype==='grass'&&d.grassRepresentation==='cards'))add('stemCount',d.archetype==='succulent'?'Leaves per ring':d.archetype==='cushion'?'Crowns':'Blades',1,16,1);
           if(d.archetype!=='grass')add('branches',d.archetype==='succulent'?'Leaf rings':d.archetype==='coniferSapling'?'Branch tiers':'Branches',1,20,1);
           if(!['deadwood','succulent'].includes(d.archetype))add('density','Foliage density',.1,2.5,.05);
           if(['coniferSapling','cushion'].includes(d.archetype))add('leafSize','Leaf size · m',.015,.7,.005);
-          if(['grass','succulent'].includes(d.archetype))add('curvature','Curvature',0,2,.05);
-          if(d.archetype==='grass'){add('bladeWidth','Blade width',.005,.12,.005);form.body.append(field('Seed heads',d.seedHeads,0,1,1,v=>{this.change('seedHeads',v);this.renderPanel();},'checkbox'));}
+          if(d.archetype==='succulent'||d.archetype==='grass'&&d.grassRepresentation==='blades')add('curvature','Curvature',0,2,.05);
+          if(d.archetype==='grass'){
+            form.body.append(select('Representation',[['cards','Alpha texture cards'],['blades','Procedural blades']],d.grassRepresentation,v=>{this.change('grassRepresentation',v);this.renderPanel();}));
+            if(d.grassRepresentation==='cards'){
+              form.body.append(select('Clump layout',GRASS_CARD_LAYOUTS.map(value=>[value,title(value)]),d.cardLayout,v=>{this.change('cardLayout',v);this.renderPanel();}));
+              form.body.append(select('Grass texture',GRASS_CARD_ATLASES.map(value=>[value,value==='meadow-v1'?'Meadow grass atlas':title(value)]),d.grassAtlas,v=>this.change('grassAtlas',v)));
+              add('cardVariation','Card variation',0,1,.05);add('cardLean','Card lean',0,1,.05);
+            }else add('bladeWidth','Blade width',.005,.12,.005);
+            form.body.append(field('Seed heads',d.seedHeads,0,1,1,v=>{this.change('seedHeads',v);this.renderPanel();},'checkbox'));
+          }
           if(d.archetype==='cushion')form.body.append(field('Flowering',d.flowering,0,1,1,v=>{this.change('flowering',v);this.renderPanel();},'checkbox'));
         }
       }else{
@@ -256,13 +270,23 @@ export class Studio {
       if(d.archetype!=='fern')form.body.append(field('Flowering',d.flowering,0,1,1,v=>{this.change('flowering',v);this.renderPanel();},'checkbox'));
       if(d.flowering){if(d.archetype==='flower')add('flowerCount','Flower heads',1,16,1);add('petalCount','Petals',4,16,1);}
       }
-      if(!['cactus','deadwood'].includes(d.archetype))form.body.append(select('Leaf design',LEAF_DESIGNS.map(value=>[value,title(value)]),d.leafDesign,v=>this.change('leafDesign',v)));
+      if(!['cactus','deadwood'].includes(d.archetype)&&!(d.archetype==='grass'&&d.grassRepresentation==='cards')){
+        form.body.append(select('Leaf design',LEAF_DESIGNS.map(value=>[value,title(value)]),d.leafDesign,v=>{
+          const leafTexture=leafTexturesForDesign(v).some(texture=>texture.id===d.leafTexture)?d.leafTexture:legacyLeafTexture(v);
+          this.changeMany({leafDesign:v,leafTexture});this.renderPanel();
+        }));
+        const textures=leafTexturesForDesign(d.leafDesign);
+        form.body.append(select('Leaf texture',textures.map(texture=>[texture.id,texture.name]),d.leafTexture,v=>{this.change('leafTexture',v);this.renderPanel();}));
+        const texture=leafTextureInfo(d.leafTexture),preview=el('div','leaf-texture-preview');
+        const image=el('img');image.src=texture.path;image.alt=`${texture.name} texture preview`;preview.append(image,el('span','',texture.atlasCells>1?'Four stable leaf variations':'Classic single surface'));form.body.append(preview);
+      }
     }else{
       add('depth','Depth · m',.01,50,.05);if(!['slab','outcrop'].includes(d.archetype)){for(const k of ['roundness','angularity','asymmetry','flattening','displacement'])add(k,title(k),0,1,.05);add('frequency','Surface frequency',.1,10,.1);}
       form.body.append(select('Shape profile',ROCK_SHAPE_PROFILES.map(value=>[value,value.replace(/([a-z])([A-Z])/g,'$1 $2').replace(/^./,c=>c.toUpperCase())]),d.shapeProfile??({pebble:'rounded',rock:'fieldstone',boulder:'irregularBoulder',cluster:'fieldstone',slab:'ledgestone',outcrop:'ledgestone'})[d.archetype],v=>this.change('shapeProfile',v)));
       if(d.archetype==='cluster'){form.body.append(select('Cluster mix',[['pebbles','Pebble patch'],['mixed','Mixed stones'],['outcrop','Boulder outcrop'],['scree','Talus scree']],d.clusterMix,v=>this.change('clusterMix',v)));add('count','Members',1,128,1);add('radius','Cluster radius · m',.1,40,.1);add('spacing','Member spacing · m',0,5,.05);}
       form.body.append(select('Collider',['none','box','sphere','convex'].map(t=>[t,title(t)]),d.colliderMode,v=>this.change('colliderMode',v)));
     }
+    this.grassEditor.render(body,{el,action,select,field,section,title});
     const surface=section('Surface');body.append(surface.element);
     for(const key of mode==='plant'?['stemColor','leafColor',...(d.flowering||d.seedHeads?['flowerColor']:[])]:['color'])surface.body.append(field(key==='stemColor'&&d.stemMaterial==='bark'&&d.archetype!=='deadwood'?'Bark tint':title(key),d[key],0,0,0,v=>this.change(key,v),'color'));
     if(mode==='plant'&&d.stemMaterial==='bark'&&d.archetype!=='deadwood')surface.body.append(select('Bark design',PLANT_BARK_TYPES.map(value=>[value,value.replace('Bark','Bark ')]),d.barkType,v=>this.change('barkType',v)));
@@ -272,7 +296,7 @@ export class Studio {
     }
     if(mode==='rock'){surface.body.append(field('Roughness',d.roughness,0,1,.05,v=>this.change('roughness',v)));surface.body.append(field('Color variation',d.variation,0,1,.05,v=>this.change('variation',v)));surface.body.append(field('Flat shading',d.flatShading,0,0,0,v=>this.change('flatShading',v),'checkbox'));}
     const preview=section('Preview & level of detail');body.append(preview.element);const lods=el('div','studio-button-row');
-    for(let i=0;i<3;i++)lods.append(action(i===0?'Full':`LOD ${i}`,()=>{this.lod=i;this.viewportGroup.clear();if(this.asset)this.viewportGroup.add(this.asset.lods[i]);this.updateAssetStats();}));preview.body.append(lods,el('p','asset-stats','Generating…'));
+    for(let i=0;i<3;i++)lods.append(action(i===0?'Full':`LOD ${i}`,()=>{this.lod=i;this.viewportGroup.clear();if(this.asset)this.viewportGroup.add(this.asset.lods[i]);this.grassEditor.sync();this.updateAssetStats();}));preview.body.append(lods,el('p','asset-stats','Generating…'));
     preview.body.append(action('Frame asset · F',()=>this.fit()));
     const out=section('Save & use');body.append(out.element);
     this.exportOptions ||= {maxTextureSize:2048,includeInstancedScene:false,includeBakedChunks:false};
@@ -436,7 +460,7 @@ export class Studio {
     else{const object=(this.mode==='environment'?this.lastAuthoredMode:this.mode)==='tree'?this.tree:this.viewportGroup.children[0];if(!object)return;object.updateMatrixWorld(true);const b=new THREE.Box3().setFromObject(object);center=b.getCenter(new THREE.Vector3());size=Math.max(.15,b.getSize(new THREE.Vector3()).length());}
     this.controls.target.copy(center);this.camera.position.copy(center).add(new THREE.Vector3(size*.85,size*.5,size*.9));this.camera.near=Math.max(.01,size/1000);this.camera.far=Math.max(2000,size*20);this.camera.zoom=1;this.camera.updateProjectionMatrix();this.controls.update();
   }
-  project(){this.cameras.modes[this.mode]=this.cameraState();return{format:'ez-environment-project',version:2,mode:this.mode,lastAuthoredMode:this.lastAuthoredMode,plant:structuredClone(this.definitions.plant),rock:structuredClone(this.definitions.rock),tree:cleanTree(this.tree),environment:structuredClone(this.environment.options),cameras:structuredClone(this.cameras)};}
+  project(){this.cameras.modes[this.mode]=this.cameraState();return{format:'ez-environment-project',version:2,mode:this.mode,lastAuthoredMode:this.lastAuthoredMode,plant:structuredClone(this.definitions.plant),rock:structuredClone(this.definitions.rock),grassLayouts:structuredClone(this.grassEditor.saved),tree:cleanTree(this.tree),environment:structuredClone(this.environment.options),cameras:structuredClone(this.cameras)};}
   persist(){try{localStorage.setItem(STORAGE,JSON.stringify(this.project()));}catch(e){this.status(`Autosave unavailable: ${e.message}`,true);}}
   saveProject(){try{downloadBlob(new Blob([JSON.stringify(this.project(),null,2)],{type:'application/json'}),'ez-environment-project.json');this.persist();this.status('Project saved.');}catch(e){this.status(e.message,true);}}
   onTreeChanged(){
@@ -462,6 +486,7 @@ export class Studio {
     if(!data||data.format!=='ez-environment-project'||![1,2].includes(data.version))throw new Error('Unsupported project format/version.');
     if(!['tree','plant','rock','environment'].includes(data.mode||'environment'))throw new Error('Unknown saved editor mode.');
     const lastAuthoredMode=validateLastAuthoredMode(data.lastAuthoredMode,data.mode);
+    const grassLayouts=validateGrassCardEdits(data.grassLayouts??this.grassEditor.saved);
     const options=validateOptions(data.version===1?{...data.environment,composition:'legacy',includeAuthoredTree:true}:data.environment),plant=createPlantDefinition(data.plant.archetype,data.plant),rock=createRockDefinition(data.rock.archetype,data.rock),cameras=validateCameras(data.version===2?data.cameras:undefined);
     const preparedTree=data.tree?prepareTreeProject(data.tree,this.tree):null;
     const currentIds=new Set(this.environment.options.customSpecies.map(c=>c.id));
@@ -488,13 +513,15 @@ export class Studio {
     finally{if(previousSuspend===undefined)delete this.environment.suspendSceneSources;else this.environment.suspendSceneSources=previousSuspend;}
     for(const id of currentIds)oldRegistry.get(id)?.dispose();
     this.definitions={plant,rock};this.lastAuthoredMode=lastAuthoredMode;this.cameras=cameras;this.history=[];this.future=[];
+    this.grassEditor.saved=grassLayouts;this.grassEditor.active=false;
     if(preparedTree){commitTreeProject(this.tree,preparedTree);this.refreshTreeUI?.();}
     this.refreshTreeSources?.();
     await this.setMode(data.mode||'environment',{rememberCamera:false});this.persist();this.status(data.version===1?'Legacy workspace restored. Choose a biome to upgrade its composition.':'Workspace restored.');
   }
-  update(time){if(this.viewportGroup.visible&&this.assetMode==='plant'&&this.asset)this.previewWind.update(time,this.environment.options.wind);}
+  update(time){if(this.viewportGroup.visible&&this.assetMode==='plant'&&this.asset){this.previewWind.update(time,this.environment.options.wind);if(this.grassEditor.editing)this.previewWind.strength.value=0;}this.grassEditor.update();}
   dispose(){
     if(this._disposed)return;this._disposed=true;clearTimeout(this.debounce);clearTimeout(this.treeChangeTimer);this.exportController?.abort();this.client.dispose();this.asset?.dispose();this.asset=null;this.previewWind.dispose();
+    this.grassEditor.dispose();
     this.renderer.domElement.removeEventListener('pointerdown',this._paintHandler);this.renderer.domElement.removeEventListener('pointermove',this._brushMoveHandler);this.renderer.domElement.removeEventListener('pointerleave',this._brushLeaveHandler);window.removeEventListener('keydown',this._keyHandler);
     this.brushOutline.geometry.dispose();this.brushOutline.material.dispose();this.brushOutline.removeFromParent();const handle=document.getElementById('inspector-resize');handle.removeEventListener('pointerdown',this._resizeDown);handle.removeEventListener('pointermove',this._resizeMove);handle.removeEventListener('pointerup',this._resizeUp);handle.removeEventListener('lostpointercapture',this._resizeUp);handle.removeEventListener('keydown',this._resizeKey);
     document.getElementById('save-project').removeEventListener('click',this._saveHandler);document.getElementById('open-project').removeEventListener('click',this._openHandler);document.getElementById('fit-view').removeEventListener('click',this._fitHandler);

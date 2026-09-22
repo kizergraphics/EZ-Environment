@@ -20,7 +20,7 @@ export function buildPlantForm(d, { range, addStem, addLeaf, radial, curvedPath,
     for(let i=0;i<count;i++) {
       const a=i*golden, root=radial(a,Math.sqrt(i/count)*.18), h=range(.45,1);
       const blade={position:root,direction:radial(a,range(.12,.5),h).normalize(),length:h,width:d.bladeWidth,
-        twist:range(-.25,.25),fold:d.curvature*.025,tint:range(.8,1.15)};
+        twist:range(-.25,.25),fold:d.curvature*.025,tint:range(.8,1.15),design:'grassBlade'};
       model.leaves.push(blade);
       if(d.seedHeads && i%3===0) {
         const tip=root.clone().add(radial(a,.12,h*1.1));

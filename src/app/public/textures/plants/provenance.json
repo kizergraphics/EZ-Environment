@@ -22,5 +22,95 @@
     "description": "Conifer needle epidermis with continuous longitudinal ridges and subtle stomatal rows.",
     "processing": "Runtime tint-compatible albedo; normal and roughness maps are artistic luminance derivatives, not measured scan data.",
     "scope": "Conifer needles, grass blades and cushion-scale generated foliage."
+  },
+  "grass/grass-clumps-v1.png": {
+    "source": "Built-in ImageGen, generated for EZ Environment on 2026-09-19",
+    "description": "Sixteen-cell RGBA atlas of original upright, fan-shaped, basal, bent and seed-bearing meadow-grass cutouts for crossed-card clumps.",
+    "processing": "Runtime preserves source alpha and color; normal and roughness maps are artistic derivatives, not measured scan data. Transparent fringe RGB is ignored by alpha testing.",
+    "scope": "Superseded prototype retained for comparison; opaque interior masks were unsuitable for crossed-card grass. Runtime uses grass-clumps-v2.png."
+  },
+  "grass/grass-clumps-v2.png": {
+    "source": "Built-in ImageGen, generated for EZ Environment on 2026-09-19 as two four-cutout sheets",
+    "description": "Eight sparse grass cutouts with genuine transparent gaps: tall, medium, left fan, right fan, basal, dry bent, wisps and seed accents. Packed as 2048 x 1024 RGBA with 512-pixel slots and 16-pixel gutters.",
+    "processing": "scripts/prepare-grass-atlas.mjs preserves generated alpha while trimming and resizing cutouts, packs their measured bounds into grass-atlas-v2.json, and dilates blade RGB into transparent texels for clean filtering. Normal and roughness maps are subtle artistic derivatives, not measured scans.",
+    "scope": "Corrected revision 2 of the meadow-v1 grass texture identity, used by all four card layouts including saved definitions."
+  },
+  "shrubs/woodland-shrub-v1.png": {
+    "source": "Built-in ImageGen, generated for EZ Environment on 2026-09-19",
+    "description": "Four-cell lobed woodland leaf-interior atlas with branching veins and olive-green mottling.",
+    "processing": "Runtime albedo preserves authored color; normal and roughness maps are artistic luminance derivatives, not measured scan data.",
+    "scope": "Woodland shrub procedural leaves."
+  },
+  "shrubs/boxwood-v1.png": {
+    "source": "Built-in ImageGen, generated for EZ Environment on 2026-09-19",
+    "description": "Four-cell boxwood leaf-interior atlas with restrained midribs, looping veins and fine waxy pores.",
+    "processing": "Runtime albedo preserves authored color; normal and roughness maps are artistic luminance derivatives, not measured scan data.",
+    "scope": "Dense boxwood procedural leaves."
+  },
+  "shrubs/meadow-bush-v1.png": {
+    "source": "Built-in ImageGen, generated for EZ Environment on 2026-09-19",
+    "description": "Four-cell thin meadow-leaf atlas with delicate upward veins and yellow-green variation.",
+    "processing": "Runtime albedo preserves authored color; normal and roughness maps are artistic luminance derivatives, not measured scan data.",
+    "scope": "Spreading meadow bush procedural leaves."
+  },
+  "shrubs/copper-bush-v1.png": {
+    "source": "Built-in ImageGen, generated for EZ Environment on 2026-09-19",
+    "description": "Four-cell copper and bronze heart-leaf atlas with fanning basal veins and natural age variation.",
+    "processing": "Runtime albedo preserves authored color; normal and roughness maps are artistic luminance derivatives, not measured scan data.",
+    "scope": "Copperleaf bush procedural leaves."
+  },
+  "shrubs/bush-1-v1.png": {
+    "source": "Built-in ImageGen, generated for EZ Environment on 2026-09-19",
+    "description": "Four-cell hazel-inspired leaf atlas with pronounced alternating veins, puckering and restrained weathering.",
+    "processing": "Runtime albedo preserves authored color; normal and roughness maps are artistic luminance derivatives, not measured scan data.",
+    "scope": "Bush 1 procedural leaves."
+  },
+  "shrubs/bush-2-v1.png": {
+    "source": "Built-in ImageGen, generated for EZ Environment on 2026-09-19",
+    "description": "Four-cell smooth heart-leaf atlas with quiet basal vein fans and pale new-growth variation.",
+    "processing": "Runtime albedo preserves authored color; normal and roughness maps are artistic luminance derivatives, not measured scan data.",
+    "scope": "Bush 2 procedural leaves."
+  },
+  "shrubs/bush-3-v1.png": {
+    "source": "Built-in ImageGen, generated for EZ Environment on 2026-09-19",
+    "description": "Four-cell juniper-inspired needle epidermis atlas with longitudinal stomatal stripes and blue-green waxy bands.",
+    "processing": "Runtime albedo preserves authored color; normal and roughness maps are artistic luminance derivatives, not measured scan data.",
+    "scope": "Bush 3 procedural needles."
+  },
+  "shrubs/berry-thicket-v1.png": {
+    "source": "Built-in ImageGen, generated for EZ Environment on 2026-09-19",
+    "description": "Four-cell bramble-inspired leaf atlas with strong ribbing, corrugated tissue and limited weathering.",
+    "processing": "Runtime albedo preserves authored color; normal and roughness maps are artistic luminance derivatives, not measured scan data.",
+    "scope": "Berry Thicket procedural leaves."
+  },
+  "shrubs/sagebrush-v1.png": {
+    "source": "Built-in ImageGen, generated for EZ Environment on 2026-09-19",
+    "description": "Four-cell silver-gray sagebrush atlas with dense felt-like fibers and subdued central veins.",
+    "processing": "Runtime albedo preserves authored color; normal and roughness maps are artistic luminance derivatives, not measured scan data.",
+    "scope": "Sagebrush procedural leaves."
+  },
+  "shrubs/heather-cushion-v1.png": {
+    "source": "Built-in ImageGen, generated for EZ Environment on 2026-09-19",
+    "description": "Four-cell heather scale atlas with overlapping scale tissue, central grooves and brown-green age variation.",
+    "processing": "Runtime albedo preserves authored color; normal and roughness maps are artistic luminance derivatives, not measured scan data.",
+    "scope": "Heather Cushion procedural foliage."
+  },
+  "shrubs/generic-shrub-v1.png": {
+    "source": "Built-in ImageGen, generated for EZ Environment on 2026-09-19",
+    "description": "Four-cell rounded-lobed scrub-leaf atlas with fanning veins and yellow-olive mottling.",
+    "processing": "Runtime albedo preserves authored color; normal and roughness maps are artistic luminance derivatives, not measured scan data.",
+    "scope": "Generic environment shrub procedural leaves."
+  },
+  "shrubs/generic-bush-v1.png": {
+    "source": "Built-in ImageGen, generated for EZ Environment on 2026-09-19",
+    "description": "Four-cell narrow toothed scrub-leaf atlas with alternating side veins and meadow-green grain.",
+    "processing": "Runtime albedo preserves authored color; normal and roughness maps are artistic luminance derivatives, not measured scan data.",
+    "scope": "Generic environment bush procedural leaves."
+  },
+  "shrubs/dry-shrub-v1.png": {
+    "source": "Built-in ImageGen, generated for EZ Environment on 2026-09-19",
+    "description": "Four-cell dry scrub-leaf atlas with faded olive, tan-gray desiccation and dusty surface damage.",
+    "processing": "Runtime albedo preserves authored color; normal and roughness maps are artistic luminance derivatives, not measured scan data.",
+    "scope": "Dry shrub procedural leaves."
   }
 }

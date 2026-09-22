@@ -10,6 +10,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { unzipSync } from 'three/addons/libs/fflate.module.js';
 import { validateMaterialCatalog } from '../src/app/export/material-catalog.js';
+import { checkGrassEditor, checkGrassEditorRestart } from './grass-editor-checks.mjs';
 
 const source = path.resolve(process.argv[2] || 'release/EZ-Environment-1.1.0-Portable.exe');
 const digest = createHash('sha256');
@@ -97,6 +98,7 @@ try {
       localDecoderStatus: await fetch('/draco/draco_decoder.wasm').then(r => r.status),
       localLeafSurfaceStatus: await fetch('/textures/plants/leaf-surface-v1.png').then(r => r.status),
       localWoodSurfaceStatus: await fetch('/textures/wood/weathered-grain-v1.png').then(r => r.status),
+      localGrassSurfaceStatus: await fetch('/textures/grass/grass-clumps-v2.png').then(r => r.status),
       renderer: ext ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER),
       dpr: devicePixelRatio,
       resolution: [window.__EZ_ENVIRONMENT__.renderer.domElement.width, window.__EZ_ENVIRONMENT__.renderer.domElement.height],
@@ -108,6 +110,7 @@ try {
   assert.equal(checks.localDecoderStatus, 200);
   assert.equal(checks.localLeafSurfaceStatus, 200);
   assert.equal(checks.localWoodSurfaceStatus, 200);
+  assert.equal(checks.localGrassSurfaceStatus, 200);
   assert.equal(checks.dpr, 1); assert.deepEqual(checks.resolution, [1920, 1080]);
   const modes = [];
   for (const mode of ['plant', 'rock', 'environment', 'tree']) {
@@ -156,13 +159,51 @@ try {
   // Exercise the packaged export button with all resource requests restricted to
   // the app's offline origin. Direct downloads avoid an interactive save dialog.
   await page.evaluate(async () => { const studio=window.__EZ_ENVIRONMENT__.studio; await studio.setMode('plant'); studio.renderPanel(); });
+  if(process.env.EZ_PORTABLE_GRASS_ONLY==='1'){
+    await page.locator('#studio-panel select[aria-label="Preset"]').selectOption('short-meadow-grass');
+    await page.waitForFunction(()=>!window.__EZ_ENVIRONMENT__.studio.pending&&window.__EZ_ENVIRONMENT__.studio.asset.definition.archetype==='grass');
+    assert.equal(await page.locator('#studio-panel select[aria-label="Representation"]').inputValue(),'cards');
+    checks.grassLayouts=[];
+    for(const layout of ['sparseCross','staggeredStar','naturalOffset','denseTuft']){
+      await page.locator('#studio-panel select[aria-label="Clump layout"]').selectOption(layout);
+      await page.waitForFunction(layout=>!window.__EZ_ENVIRONMENT__.studio.pending&&window.__EZ_ENVIRONMENT__.studio.asset.definition.cardLayout===layout,layout);
+      const grass=await page.evaluate(()=>{
+        const a=window.__EZ_ENVIRONMENT__,asset=a.studio.asset,lods=[];
+        for(const lod of asset.lods)lod.traverse(mesh=>{
+          if(!mesh.isMesh)return;
+          const material=mesh.material,image=material.map.image,canvas=document.createElement('canvas');
+          canvas.width=image.width;canvas.height=image.height;
+          const context=canvas.getContext('2d');context.drawImage(image,0,0);
+          const rgba=context.getImageData(0,0,canvas.width,canvas.height).data;
+          let opaque=0;for(let i=3;i<rgba.length;i+=4)if(rgba[i]>=115)opaque++;
+          lods.push({triangles:mesh.geometry.index.count/3,revision:material.userData.grassAtlasRevision,alphaTest:material.alphaTest,side:material.side,mapSize:[image.width,image.height],alphaCoverage:opaque/(image.width*image.height),pbrReady:['map','normalMap','roughnessMap'].every(key=>material[key]?.image?.width>0)});
+        });
+        a.render();return{layout:asset.definition.cardLayout,lods};
+      });
+      assert.equal(grass.layout,layout);assert.equal(grass.lods.length,3);
+      for(const lod of grass.lods){
+        assert.equal(lod.revision,2);assert.equal(lod.alphaTest,.45);assert.equal(lod.side,2);
+        assert.deepEqual(lod.mapSize,[2048,1024]);assert.ok(lod.pbrReady);
+        assert.ok(lod.alphaCoverage>.03&&lod.alphaCoverage<.2,'Packaged grass must preserve the open alpha mask.');
+        assert.ok(lod.triangles>0&&lod.triangles<=12);
+      }
+      checks.grassLayouts.push(grass);
+      await page.screenshot({path:path.join(output,`portable-grass-${layout}.png`)});
+    }
+    console.log('PASS portable grass revision 2: all four layouts and three LODs');
+  }
   if(process.env.EZ_PORTABLE_WOOD_ONLY==='1'){
     await page.locator('#studio-panel select[aria-label="Preset"]').selectOption('fallen-log');
     await page.waitForFunction(()=>!window.__EZ_ENVIRONMENT__.studio.pending&&window.__EZ_ENVIRONMENT__.studio.asset.definition.archetype==='deadwood');
     await page.screenshot({path:path.join(output,'portable-wood.png')});
   }
+  if(process.env.EZ_PORTABLE_GRASS_EDITOR==='1')checks.savedGrassLayouts=await checkGrassEditor(page,output);
   assert.equal(await page.locator('#studio-panel select[aria-label="Texture resolution"]').inputValue(), '2048');
   await page.locator('#studio-panel select[aria-label="Texture resolution"]').selectOption('512');
+  const expectedGrassExport=checks.savedGrassLayouts?await page.evaluate(()=>{
+    const asset=window.__EZ_ENVIRONMENT__.studio.asset;
+    return{definition:asset.definition,positions:asset.lods.map(lod=>Array.from(lod.children[0].geometry.attributes.position.array))};
+  }):null;
   const downloads = await browser.newBrowserCDPSession();
   await downloads.send('Browser.setDownloadBehavior', { behavior: 'allowAndName', downloadPath: output, eventsEnabled: true });
   let downloadTimer;
@@ -184,6 +225,21 @@ try {
   const materialCatalog = JSON.parse(new TextDecoder().decode(packFiles['materials.json']));
   assert.ok(validateMaterialCatalog(materialCatalog, new Map(Object.entries(packFiles))));
   assert.ok(materialCatalog.textures.length > 0 && packFiles['textures/LICENSE.txt'] && packFiles['textures/plant-provenance.json']);
+  if(expectedGrassExport){
+    assert.deepEqual(JSON.parse(new TextDecoder().decode(packFiles['preset.json'])),expectedGrassExport.definition);
+    for(let level=0;level<3;level++){
+      const bytes=packFiles[`lod${level}.glb`],view=new DataView(bytes.buffer,bytes.byteOffset,bytes.byteLength),jsonSize=view.getUint32(12,true);
+      const gltf=JSON.parse(new TextDecoder().decode(bytes.slice(20,20+jsonSize)));
+      assert.equal(gltf.meshes.length,1,'Editor gizmos must not enter the exported GLB.');
+      const accessor=gltf.accessors[gltf.meshes[0].primitives[0].attributes.POSITION],buffer=gltf.bufferViews[accessor.bufferView];
+      assert.equal(accessor.componentType,5126);assert.equal(accessor.type,'VEC3');
+      const offset=28+jsonSize+(buffer.byteOffset||0)+(accessor.byteOffset||0),stride=buffer.byteStride||12,positions=[];
+      for(let index=0;index<accessor.count;index++)for(let axis=0;axis<3;axis++)positions.push(view.getFloat32(offset+index*stride+axis*4,true));
+      assert.deepEqual(positions,expectedGrassExport.positions[level],`Edited grass vertices must survive LOD ${level} GLB export.`);
+    }
+    checks.editedGrassExport='Preset data and all three GLB vertex buffers match the authored layout; no editor helpers exported.';
+    console.log('PASS portable edited grass export: preset and all three GLB vertex buffers');
+  }
   if(process.env.EZ_PORTABLE_WOOD_ONLY==='1'){
     assert.ok(packFiles['textures/wood-provenance.json']);
     assert.ok(materialCatalog.materials.some(material=>/cut ends/i.test(material.name)));
@@ -225,6 +281,7 @@ try {
   await page.waitForFunction(()=>document.getElementById('studio-status').textContent==='Workspace restored.');
   const restored=await page.evaluate(()=>{const s=window.__EZ_ENVIRONMENT__.studio;return{mode:s.mode,latest:s.lastAuthoredMode,tree:window.__EZ_ENVIRONMENT__.tree.visible};});
   assert.deepEqual(restored,{mode:'environment',latest:'tree',tree:true});
+  if(checks.savedGrassLayouts)await checkGrassEditorRestart(page,checks.savedGrassLayouts);
   await close();
   const report = { date: new Date().toISOString(), source, copiedExecutable: executable, executableSha256, profile, checks, modes, catalog, biomes, errors, nativeExitCodes, persistence: 'Verified across restart from a moved EXE in a path containing spaces.' };
   await writeFile(path.join(output, 'portable-report.json'), JSON.stringify(report, null, 2));

@@ -7,26 +7,10 @@ import { disposeObject } from './assets.js';
 import { extraSpecies } from './biome-species.js';
 
 export function createGrass(variant = 'medium') {
-  const settings = {short:[.55,.8,5],medium:[1,1,7],tall:[1.7,.75,7],clump:[1.15,1.2,11]}[variant];
+  const settings = {short:[.55,.8,'sparseCross',12001],medium:[1,1,'naturalOffset',12002],tall:[1.7,.75,'staggeredStar',12003],clump:[1.15,1.2,'denseTuft',12004]}[variant];
   if(!settings)throw new Error('Unknown grass variant.');
-  const lods = [settings[2],Math.ceil(settings[2]*.55),2].map((blades, lod) => {
-    const geometries = [];
-    for (let i=0;i<blades;i++) {
-      const a = i * 2.39996, x = Math.sin(a)*0.12, z = Math.cos(a)*0.12;
-      const h = (0.55 + (i%3)*0.17)*settings[0], w = 0.045*settings[1], bend = 0.14*settings[0];
-      const g = new THREE.BufferGeometry();
-      g.setAttribute('position', new THREE.Float32BufferAttribute([x-w,0,z, x+w,0,z, x+w*.55,h*.5,z+bend*.4, x-w*.55,h*.5,z+bend*.4, x,h,z+bend],3));
-      g.setAttribute('uv',new THREE.Float32BufferAttribute([0,0,1,0,1,.5,0,.5,.5,1],2));
-      g.setAttribute('windWeight',new THREE.Float32BufferAttribute([0,0,.3,.3,1],1));
-      g.setIndex([0,2,1,0,3,2,3,4,2]); g.rotateY(a); g.computeVertexNormals(); geometries.push(g);
-    }
-    const geometry = mergeGeometries(geometries); geometries.forEach(g => g.dispose());
-    const group = new THREE.Group(); group.name = `lod${lod}`;
-    group.add(new THREE.Mesh(geometry,new THREE.MeshStandardMaterial({color:0x547d31,roughness:1,side:THREE.DoubleSide})));
-    group.children[0].material.userData = { pbrFamily:'foliage', pbrTextureScale:1, vegetation:true };
-    return group;
-  });
-  return { object3D:lods[0],lods,definition:{version:1,archetype:'grass',variant,leafMaterial:'foliage',textureScale:1},definitionHash:`grass-${variant}-v1`,dispose(){lods.forEach(g=>disposeObject(g));} };
+  const definition=createPlantDefinition('grass',{seed:settings[3],height:settings[0],width:settings[1],cardLayout:settings[2],variant});
+  return generatePlant(definition);
 }
 export function collectMeshes(root) {
   root.updateMatrixWorld(true); const parts = [];
