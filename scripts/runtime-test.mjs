@@ -35,6 +35,13 @@ try{
   await page.waitForFunction(()=>window.__EZ_ENVIRONMENT__?.ready,{timeout:60000});
   await page.waitForFunction(()=>document.getElementById('loading-screen')?.hidden||document.getElementById('loading-screen')?.style.display==='none'||!document.getElementById('loading-screen'));
   record('App startup and environment initialization',await page.evaluate(()=>({mode:window.__EZ_ENVIRONMENT__.mode,count:window.__EZ_ENVIRONMENT__.environment.placement.count})));
+  // This suite exercises the original authoring workflow with fixed placement
+  // settings, rather than depending on the sparse layers of the startup biome.
+  await page.evaluate(async()=>{
+    const {DEFAULT_OPTIONS}=await import('/environment/options.js');
+    const studio=window.__EZ_ENVIRONMENT__.studio;
+    await studio.envChange(structuredClone(DEFAULT_OPTIONS),{modified:false});studio.renderPanel();
+  });
   const screenshot=async name=>{
     await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
     const target=path.join(output,`${name}.png`);await page.screenshot({path:target});report.screenshots.push(target);
