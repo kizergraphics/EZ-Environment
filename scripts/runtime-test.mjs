@@ -178,7 +178,8 @@ try{
   const lodState=await page.evaluate(()=>{
     const app=window.__EZ_ENVIRONMENT__,e=app.environment;
     window.__lodTest={position:app.camera.position.clone(),target:app.controls.target.clone(),enabled:app.controls.enabled,versions:new Map()};
-    e.traverse(o=>{if(o.isInstancedMesh)window.__lodTest.versions.set(o,[o.instanceMatrix.version,o.instanceMatrix.array]);});
+    // Scatter batches retain their buffers; biome trees rebuild visible LOD lists.
+    for(const batch of e.batches.values())batch.root.traverse(o=>{if(o.isInstancedMesh)window.__lodTest.versions.set(o,[o.instanceMatrix.version,o.instanceMatrix.array]);});
     app.controls.enabled=false;return{key:e.batches.has('0:0')?'0:0':e.batches.keys().next().value};
   });
   const transitionRows=[];
@@ -195,11 +196,11 @@ try{
   const lodVerification=await page.evaluate(()=>{
     const app=window.__EZ_ENVIRONMENT__,e=app.environment,saved=window.__lodTest;
     let unchanged=true,windDepth=0,sharedMaterials=new Set();
-    e.traverse(o=>{if(o.isInstancedMesh){const old=saved.versions.get(o);if(old[0]!==o.instanceMatrix.version||old[1]!==o.instanceMatrix.array)unchanged=false;sharedMaterials.add(o.material);if(o.castShadow&&o.name.startsWith('plants_')&&o.customDepthMaterial?.customProgramCacheKey().includes('ez-wind'))windDepth++;}});
+    for(const batch of e.batches.values())batch.root.traverse(o=>{if(o.isInstancedMesh){const old=saved.versions.get(o);if(old[0]!==o.instanceMatrix.version||old[1]!==o.instanceMatrix.array)unchanged=false;sharedMaterials.add(o.material);if(o.castShadow&&o.name.startsWith('plants_')&&o.customDepthMaterial?.customProgramCacheKey().includes('ez-wind'))windDepth++;}});
     app.camera.position.copy(saved.position);app.controls.target.copy(saved.target);app.controls.enabled=saved.enabled;app.controls.update();delete window.__lodTest;
     return{unchanged,windDepth,sharedMaterials:sharedMaterials.size,sources:e.lod.sources.size,programsValid:app.renderer.info.programs.every(program=>program.diagnostics?.runnable!==false)};
   });
-  assert.ok(lodVerification.unchanged&&lodVerification.windDepth>0&&lodVerification.programsValid);assert.ok(lodVerification.sharedMaterials<=lodVerification.sources*3);
+  assert.ok(lodVerification.unchanged&&lodVerification.windDepth>0&&lodVerification.programsValid,JSON.stringify(lodVerification));assert.ok(lodVerification.sharedMaterials<=lodVerification.sources*3);
   record('Compiled dither LOD transitions and matching wind shadows preserve instance buffers',{transitionRows,...lodVerification});
   const disposedInitialize=await page.evaluate(async()=>{
     const {EnvironmentController}=await import('/environment/EnvironmentController.js');const {createRegistry}=await import('/environment/species.js');
