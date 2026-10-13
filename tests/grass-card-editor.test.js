@@ -1,11 +1,26 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { ObjectLoader } from 'three';
+import { ObjectLoader, PerspectiveCamera, Scene } from 'three';
 import { createPlantDefinition, generatePlant } from '../src/app/generators/plants.js';
 import { applyGrassCardEdits, defaultGrassCardEdit, grassCardCount, validateGrassCardEdits } from '../src/app/generators/grass-cards.js';
+import { GrassCardEditor } from '../src/app/studio/grass-card-editor.js';
 
 const edits=layout=>Array.from({length:grassCardCount(layout)},defaultGrassCardEdit);
 const vertices=asset=>Array.from(asset.lods[0].children[0].geometry.attributes.position.array);
+
+test('grass editor can create and dispose its transform gizmo with the installed Three.js',()=>{
+  const scene=new Scene();
+  const domElement={style:{},addEventListener(){},removeEventListener(){}};
+  const editor=new GrassCardEditor({scene,camera:new PerspectiveCamera(),renderer:{domElement}});
+  try{
+    editor.setup();
+    const helper=editor.gizmo.getHelper();
+    assert.equal(helper.parent,scene,'The visible transform helper must belong to the scene');
+    assert.equal(helper.userData.editorOnly,true,'The helper must be excluded from asset exports');
+    assert.ok(editor.pivot.parent&&editor.outline.parent);
+  }finally{editor.dispose();}
+  assert.equal(scene.children.length,0,'Disposal must remove the helper and edit overlays');
+});
 
 test('grass plane edits survive JSON and worker serialization, without moving other planes',()=>{
   const cards=edits('naturalOffset');cards[0]={...cards[0],position:[.3,.1,-.2],rotation:[12,43,-8],width:1.3,height:.8,texture:'dry',flipX:true};

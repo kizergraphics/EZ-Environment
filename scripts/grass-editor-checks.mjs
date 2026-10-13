@@ -35,7 +35,7 @@ export async function checkGrassEditor(page,output){
   assert.equal(edited.edit.rotation[1],35);assert.equal(edited.edit.width,1.25);assert.equal(edited.edit.texture,'dry');assert.equal(edited.edit.flipX,true);assert.equal(edited.wind,0);
   // Exercise a real viewport drag against the projected X-axis picker.
   const handle=await page.evaluate(()=>{
-    const a=window.__EZ_ENVIRONMENT__,g=a.studio.grassEditor.gizmo;
+    const a=window.__EZ_ENVIRONMENT__,g=a.studio.grassEditor.gizmo.getHelper();
     a.render();g.updateMatrixWorld(true);
     const picker=g.children[0].picker.translate.children.find(object=>object.name==='X');
     picker.geometry.computeBoundingBox();const point=picker.geometry.boundingBox.getCenter(g.position.clone()).applyMatrix4(picker.matrixWorld).project(a.camera);
