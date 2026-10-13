@@ -11,6 +11,8 @@ import { readFile } from 'node:fs/promises';
 import { unzipSync } from 'three/addons/libs/fflate.module.js';
 import { validateMaterialCatalog } from '../src/app/export/material-catalog.js';
 import { checkGrassEditor, checkGrassEditorRestart } from './grass-editor-checks.mjs';
+import { PLANT_PRESETS } from '../src/app/generators/plants.js';
+import { ROCK_PRESETS } from '../src/app/generators/rocks.js';
 
 const source = path.resolve(process.argv[2] || 'release/EZ-Environment-1.1.0-Portable.exe');
 const digest = createHash('sha256');
@@ -253,7 +255,17 @@ try {
     if(process.env.EZ_PORTABLE_SURFACE_ONLY==='1')break;
     await page.evaluate(mode=>window.__EZ_ENVIRONMENT__.studio.setMode(mode),mode);
     const selector=page.locator('#studio-panel select[aria-label="Preset"]');assert.equal(await selector.locator('option').count(),expected+1);
-    for(const id of ids){await selector.selectOption(id);await page.waitForFunction(()=>!window.__EZ_ENVIRONMENT__.studio.pending);assert.equal(await selector.inputValue(),id);catalog.push({mode,id,hash:await page.evaluate(()=>window.__EZ_ENVIRONMENT__.studio.asset.definitionHash)});}
+    for(const id of ids){
+      const preset=(mode==='plant'?PLANT_PRESETS:ROCK_PRESETS).find(preset=>preset.id===id);
+      const definition=structuredClone(preset.definition);
+      // Saved grass arrangements intentionally turn a selected preset into Custom.
+      if(definition.archetype==='grass'&&checks.savedGrassLayouts)definition.grassCardEdits={...checks.savedGrassLayouts,...definition.grassCardEdits};
+      await selector.selectOption(id);
+      await page.waitForFunction(definition=>{const studio=window.__EZ_ENVIRONMENT__.studio;return !studio.pending&&JSON.stringify(studio.asset.definition)===JSON.stringify(definition);},definition);
+      const expectedSelection=JSON.stringify(definition)===JSON.stringify(preset.definition)?id:'';
+      assert.equal(await selector.inputValue(),expectedSelection);
+      catalog.push({mode,id,hash:await page.evaluate(()=>window.__EZ_ENVIRONMENT__.studio.asset.definitionHash)});
+    }
     console.log(`PASS portable ${mode} catalog (${expected} presets)`);
   }
   await page.evaluate(()=>window.__EZ_ENVIRONMENT__.studio.setMode('tree'));
