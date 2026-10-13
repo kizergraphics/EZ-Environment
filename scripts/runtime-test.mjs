@@ -127,8 +127,12 @@ try{
   assert.deepEqual(afterBadTree,beforeInvalid);record('Malformed project tree leaves the live scene unchanged');
   await mode('environment');await screenshot('environment');
   const originalGrass=await page.evaluate(()=>structuredClone(window.__EZ_ENVIRONMENT__.environment.options.layers.grass));
-  const grassSection=()=>page.locator('#studio-panel .studio-scroll > details').filter({has:page.locator('summary').filter({hasText:/^Grass$/})});
-  const openDetails=async locator=>{if(!await locator.evaluate(node=>node.open))await locator.locator(':scope > summary').click();};
+  const grassSection=()=>page.locator('#studio-panel details:has(> summary:text-is("Grass"))');
+  const openDetails=async locator=>{
+    // Layer controls can sit inside another collapsed section (Vegetation).
+    await locator.evaluate(node=>{for(let parent=node.parentElement;parent;parent=parent.parentElement)if(parent.tagName==='DETAILS')parent.open=true;});
+    if(!await locator.evaluate(node=>node.open))await locator.locator(':scope > summary').click();
+  };
   const grassAdvanced=()=>grassSection().locator('details');
   const grassForms=[];
   for(const id of ['grass','grass_short','grass_tall','grass_clump']){
@@ -146,15 +150,17 @@ try{
   await page.waitForFunction(()=>!window.__EZ_ENVIRONMENT__.environment.loading&&window.__EZ_ENVIRONMENT__.environment.options.layers.grass.height===1.6);
   const bladeScales=await page.evaluate(()=>[...window.__EZ_ENVIRONMENT__.environment.placement.chunks.values()].flatMap(c=>c.layers.grass.records.slice(0,1).map(r=>r.scale)));
   assert.ok(bladeScales.every(s=>Math.abs(s[1]/s[0]-1.6)<1e-8));record('Grass blade height applies to placement scales');
+  const grassChoices=await grassSection().getByLabel('Species',{exact:true}).locator('option').evaluateAll(options=>options.map(option=>option.value));
   await openDetails(grassAdvanced());await grassAdvanced().getByLabel('Mix species',{exact:true}).check();
-  await page.waitForFunction(()=>!window.__EZ_ENVIRONMENT__.environment.loading&&window.__EZ_ENVIRONMENT__.environment.options.layers.grass.speciesChoices.length===4);
+  await page.waitForFunction(count=>!window.__EZ_ENVIRONMENT__.environment.loading&&window.__EZ_ENVIRONMENT__.environment.options.layers.grass.speciesChoices.length===count,grassChoices.length);
   const mixedGrass=await page.evaluate(()=>{const e=window.__EZ_ENVIRONMENT__.environment,ids=new Set(),draws=new Set();for(const c of e.placement.chunks.values())for(const r of c.layers.grass.records)ids.add(r.species);e.traverse(o=>{if(o.isInstancedMesh&&o.name.startsWith('grass_'))draws.add(o.name);});return{ids:[...ids],draws:[...draws]};});
-  assert.equal(mixedGrass.ids.length,4);assert.ok(mixedGrass.ids.every(id=>mixedGrass.draws.includes(`grass_${id}`)));record('Weighted species mix produces corresponding instance batches',mixedGrass);
+  assert.deepEqual([...mixedGrass.ids].sort(),[...grassChoices].sort());assert.ok(mixedGrass.ids.every(id=>mixedGrass.draws.includes(`grass_${id}`)));record('Weighted species mix produces corresponding instance batches',mixedGrass);
+  const beforeMapCount=await page.evaluate(()=>window.__EZ_ENVIRONMENT__.environment.placement.count.grass);
   const maskPNG=await page.evaluate(()=>{const c=document.createElement('canvas');c.width=2;c.height=2;const context=c.getContext('2d');context.fillStyle='black';context.fillRect(0,0,2,2);context.fillStyle='white';context.fillRect(1,0,1,2);return c.toDataURL('image/png').split(',')[1];});
   await openDetails(grassSection());await openDetails(grassAdvanced());
   await openFile('Load grayscale density map',{name:'half-density.png',mimeType:'image/png',buffer:Buffer.from(maskPNG,'base64')},grassAdvanced());
   await page.waitForFunction(()=>!window.__EZ_ENVIRONMENT__.environment.loading&&!!window.__EZ_ENVIRONMENT__.environment.options.layers.grass.densityMap);
-  const mapState=await page.evaluate(()=>{const e=window.__EZ_ENVIRONMENT__.environment;return{map:e.options.layers.grass.densityMap,count:e.placement.count.grass};});assert.deepEqual(mapState.map.data,[0,1,0,1]);assert.ok(mapState.count>0&&mapState.count<8000);record('Grayscale PNG upload becomes a bounded density map',{width:mapState.map.width,height:mapState.map.height,count:mapState.count});
+  const mapState=await page.evaluate(()=>{const e=window.__EZ_ENVIRONMENT__.environment;return{map:e.options.layers.grass.densityMap,count:e.placement.count.grass};});assert.deepEqual(mapState.map.data,[0,1,0,1]);assert.ok(mapState.count>0&&mapState.count<beforeMapCount);record('Grayscale PNG upload becomes a bounded density map',{width:mapState.map.width,height:mapState.map.height,count:mapState.count});
   await openDetails(grassSection());await openDetails(grassAdvanced());await grassAdvanced().getByRole('button',{name:'Clear density map',exact:true}).click();
   await page.waitForFunction(()=>!window.__EZ_ENVIRONMENT__.environment.loading&&window.__EZ_ENVIRONMENT__.environment.options.layers.grass.densityMap===null);record('Density map can be cleared');
   await page.evaluate(async grass=>{await window.__EZ_ENVIRONMENT__.environment.setOptions({layers:{grass}});window.__EZ_ENVIRONMENT__.studio.renderPanel();},originalGrass);
