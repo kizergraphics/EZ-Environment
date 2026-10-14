@@ -26,7 +26,8 @@ export class GrassCardEditor {
     this.outline=new THREE.LineLoop(new THREE.BufferGeometry().setAttribute('position',new THREE.Float32BufferAttribute(new Float32Array(12),3)),new THREE.LineBasicMaterial({color:0xffdc70,depthTest:false,transparent:true,opacity:.95}));
     this.outline.renderOrder=2000;this.outline.frustumCulled=false;this.root.add(this.outline);this.studio.scene.add(this.root);
     this.gizmo=new TransformControls(this.studio.camera,this.studio.renderer.domElement);
-    this.gizmo.userData.editorOnly=true;this.gizmo.setSize(.75);this.gizmo.setSpace('world');this.studio.scene.add(this.gizmo);
+    this.gizmoHelper=this.gizmo.getHelper();this.gizmoHelper.userData.editorOnly=true;
+    this.gizmo.setSize(.75);this.gizmo.setSpace('world');this.studio.scene.add(this.gizmoHelper);
     this.gizmo.addEventListener('dragging-changed',event=>{
       this.studio.controls.enabled=!event.value;this.dragging=event.value;
       if(event.value){this.beforeDrag=this.studio.snapshot('plant');this.dragChanged=false;}
@@ -167,6 +168,6 @@ export class GrassCardEditor {
   }
   update(){if(this.root&&this.editing)this.root.position.copy(this.studio.viewportGroup.position);}
   dispose(){
-    this.gizmo?.dispose();this.gizmo?.removeFromParent();this.outline?.geometry.dispose();this.outline?.material.dispose();this.root?.removeFromParent();
+    this.gizmo?.dispose();this.gizmoHelper?.removeFromParent();this.outline?.geometry.dispose();this.outline?.material.dispose();this.root?.removeFromParent();
   }
 }

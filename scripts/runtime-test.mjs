@@ -35,6 +35,13 @@ try{
   await page.waitForFunction(()=>window.__EZ_ENVIRONMENT__?.ready,{timeout:60000});
   await page.waitForFunction(()=>document.getElementById('loading-screen')?.hidden||document.getElementById('loading-screen')?.style.display==='none'||!document.getElementById('loading-screen'));
   record('App startup and environment initialization',await page.evaluate(()=>({mode:window.__EZ_ENVIRONMENT__.mode,count:window.__EZ_ENVIRONMENT__.environment.placement.count})));
+  // This suite exercises the original authoring workflow with fixed placement
+  // settings, rather than depending on the sparse layers of the startup biome.
+  await page.evaluate(async()=>{
+    const {DEFAULT_OPTIONS}=await import('/environment/options.js');
+    const studio=window.__EZ_ENVIRONMENT__.studio;
+    await studio.envChange(structuredClone(DEFAULT_OPTIONS),{modified:false});studio.renderPanel();
+  });
   const screenshot=async name=>{
     await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
     const target=path.join(output,`${name}.png`);await page.screenshot({path:target});report.screenshots.push(target);
@@ -127,8 +134,12 @@ try{
   assert.deepEqual(afterBadTree,beforeInvalid);record('Malformed project tree leaves the live scene unchanged');
   await mode('environment');await screenshot('environment');
   const originalGrass=await page.evaluate(()=>structuredClone(window.__EZ_ENVIRONMENT__.environment.options.layers.grass));
-  const grassSection=()=>page.locator('#studio-panel .studio-scroll > details').filter({has:page.locator('summary').filter({hasText:/^Grass$/})});
-  const openDetails=async locator=>{if(!await locator.evaluate(node=>node.open))await locator.locator(':scope > summary').click();};
+  const grassSection=()=>page.locator('#studio-panel details:has(> summary:text-is("Grass"))');
+  const openDetails=async locator=>{
+    // Layer controls can sit inside another collapsed section (Vegetation).
+    await locator.evaluate(node=>{for(let parent=node.parentElement;parent;parent=parent.parentElement)if(parent.tagName==='DETAILS')parent.open=true;});
+    if(!await locator.evaluate(node=>node.open))await locator.locator(':scope > summary').click();
+  };
   const grassAdvanced=()=>grassSection().locator('details');
   const grassForms=[];
   for(const id of ['grass','grass_short','grass_tall','grass_clump']){
@@ -146,15 +157,17 @@ try{
   await page.waitForFunction(()=>!window.__EZ_ENVIRONMENT__.environment.loading&&window.__EZ_ENVIRONMENT__.environment.options.layers.grass.height===1.6);
   const bladeScales=await page.evaluate(()=>[...window.__EZ_ENVIRONMENT__.environment.placement.chunks.values()].flatMap(c=>c.layers.grass.records.slice(0,1).map(r=>r.scale)));
   assert.ok(bladeScales.every(s=>Math.abs(s[1]/s[0]-1.6)<1e-8));record('Grass blade height applies to placement scales');
+  const grassChoices=await grassSection().getByLabel('Species',{exact:true}).locator('option').evaluateAll(options=>options.map(option=>option.value));
   await openDetails(grassAdvanced());await grassAdvanced().getByLabel('Mix species',{exact:true}).check();
-  await page.waitForFunction(()=>!window.__EZ_ENVIRONMENT__.environment.loading&&window.__EZ_ENVIRONMENT__.environment.options.layers.grass.speciesChoices.length===4);
+  await page.waitForFunction(count=>!window.__EZ_ENVIRONMENT__.environment.loading&&window.__EZ_ENVIRONMENT__.environment.options.layers.grass.speciesChoices.length===count,grassChoices.length);
   const mixedGrass=await page.evaluate(()=>{const e=window.__EZ_ENVIRONMENT__.environment,ids=new Set(),draws=new Set();for(const c of e.placement.chunks.values())for(const r of c.layers.grass.records)ids.add(r.species);e.traverse(o=>{if(o.isInstancedMesh&&o.name.startsWith('grass_'))draws.add(o.name);});return{ids:[...ids],draws:[...draws]};});
-  assert.equal(mixedGrass.ids.length,4);assert.ok(mixedGrass.ids.every(id=>mixedGrass.draws.includes(`grass_${id}`)));record('Weighted species mix produces corresponding instance batches',mixedGrass);
+  assert.deepEqual([...mixedGrass.ids].sort(),[...grassChoices].sort());assert.ok(mixedGrass.ids.every(id=>mixedGrass.draws.includes(`grass_${id}`)));record('Weighted species mix produces corresponding instance batches',mixedGrass);
+  const beforeMapCount=await page.evaluate(()=>window.__EZ_ENVIRONMENT__.environment.placement.count.grass);
   const maskPNG=await page.evaluate(()=>{const c=document.createElement('canvas');c.width=2;c.height=2;const context=c.getContext('2d');context.fillStyle='black';context.fillRect(0,0,2,2);context.fillStyle='white';context.fillRect(1,0,1,2);return c.toDataURL('image/png').split(',')[1];});
   await openDetails(grassSection());await openDetails(grassAdvanced());
   await openFile('Load grayscale density map',{name:'half-density.png',mimeType:'image/png',buffer:Buffer.from(maskPNG,'base64')},grassAdvanced());
   await page.waitForFunction(()=>!window.__EZ_ENVIRONMENT__.environment.loading&&!!window.__EZ_ENVIRONMENT__.environment.options.layers.grass.densityMap);
-  const mapState=await page.evaluate(()=>{const e=window.__EZ_ENVIRONMENT__.environment;return{map:e.options.layers.grass.densityMap,count:e.placement.count.grass};});assert.deepEqual(mapState.map.data,[0,1,0,1]);assert.ok(mapState.count>0&&mapState.count<8000);record('Grayscale PNG upload becomes a bounded density map',{width:mapState.map.width,height:mapState.map.height,count:mapState.count});
+  const mapState=await page.evaluate(()=>{const e=window.__EZ_ENVIRONMENT__.environment;return{map:e.options.layers.grass.densityMap,count:e.placement.count.grass};});assert.deepEqual(mapState.map.data,[0,1,0,1]);assert.ok(mapState.count>0&&mapState.count<beforeMapCount);record('Grayscale PNG upload becomes a bounded density map',{width:mapState.map.width,height:mapState.map.height,count:mapState.count});
   await openDetails(grassSection());await openDetails(grassAdvanced());await grassAdvanced().getByRole('button',{name:'Clear density map',exact:true}).click();
   await page.waitForFunction(()=>!window.__EZ_ENVIRONMENT__.environment.loading&&window.__EZ_ENVIRONMENT__.environment.options.layers.grass.densityMap===null);record('Density map can be cleared');
   await page.evaluate(async grass=>{await window.__EZ_ENVIRONMENT__.environment.setOptions({layers:{grass}});window.__EZ_ENVIRONMENT__.studio.renderPanel();},originalGrass);
@@ -172,7 +185,8 @@ try{
   const lodState=await page.evaluate(()=>{
     const app=window.__EZ_ENVIRONMENT__,e=app.environment;
     window.__lodTest={position:app.camera.position.clone(),target:app.controls.target.clone(),enabled:app.controls.enabled,versions:new Map()};
-    e.traverse(o=>{if(o.isInstancedMesh)window.__lodTest.versions.set(o,[o.instanceMatrix.version,o.instanceMatrix.array]);});
+    // Scatter batches retain their buffers; biome trees rebuild visible LOD lists.
+    for(const batch of e.batches.values())batch.root.traverse(o=>{if(o.isInstancedMesh)window.__lodTest.versions.set(o,[o.instanceMatrix.version,o.instanceMatrix.array]);});
     app.controls.enabled=false;return{key:e.batches.has('0:0')?'0:0':e.batches.keys().next().value};
   });
   const transitionRows=[];
@@ -189,11 +203,11 @@ try{
   const lodVerification=await page.evaluate(()=>{
     const app=window.__EZ_ENVIRONMENT__,e=app.environment,saved=window.__lodTest;
     let unchanged=true,windDepth=0,sharedMaterials=new Set();
-    e.traverse(o=>{if(o.isInstancedMesh){const old=saved.versions.get(o);if(old[0]!==o.instanceMatrix.version||old[1]!==o.instanceMatrix.array)unchanged=false;sharedMaterials.add(o.material);if(o.castShadow&&o.name.startsWith('plants_')&&o.customDepthMaterial?.customProgramCacheKey().includes('ez-wind'))windDepth++;}});
+    for(const batch of e.batches.values())batch.root.traverse(o=>{if(o.isInstancedMesh){const old=saved.versions.get(o);if(old[0]!==o.instanceMatrix.version||old[1]!==o.instanceMatrix.array)unchanged=false;sharedMaterials.add(o.material);if(o.castShadow&&o.name.startsWith('plants_')&&o.customDepthMaterial?.customProgramCacheKey().includes('ez-wind'))windDepth++;}});
     app.camera.position.copy(saved.position);app.controls.target.copy(saved.target);app.controls.enabled=saved.enabled;app.controls.update();delete window.__lodTest;
     return{unchanged,windDepth,sharedMaterials:sharedMaterials.size,sources:e.lod.sources.size,programsValid:app.renderer.info.programs.every(program=>program.diagnostics?.runnable!==false)};
   });
-  assert.ok(lodVerification.unchanged&&lodVerification.windDepth>0&&lodVerification.programsValid);assert.ok(lodVerification.sharedMaterials<=lodVerification.sources*3);
+  assert.ok(lodVerification.unchanged&&lodVerification.windDepth>0&&lodVerification.programsValid,JSON.stringify(lodVerification));assert.ok(lodVerification.sharedMaterials<=lodVerification.sources*3);
   record('Compiled dither LOD transitions and matching wind shadows preserve instance buffers',{transitionRows,...lodVerification});
   const disposedInitialize=await page.evaluate(async()=>{
     const {EnvironmentController}=await import('/environment/EnvironmentController.js');const {createRegistry}=await import('/environment/species.js');
@@ -240,7 +254,7 @@ try{
     assert.ok(integration.registered&&integration.custom&&integration.recordsMatch&&integration.count>0);record(`${form} asset integrates into environment ${layer} layer`,integration);
   }
   await screenshot('environment-custom-assets');
-  await page.locator('#studio-panel summary').filter({hasText:'Paint density & exclusions'}).click();
+  await openDetails(page.locator('#studio-panel details:has(> summary:text-is("Paint density & exclusions"))'));
   await page.locator('#studio-panel').getByLabel('Brush enabled',{exact:true}).check();
   await page.locator('#studio-panel').getByLabel('Brush radius · m',{exact:true}).fill('12');await page.locator('#studio-panel').getByLabel('Brush radius · m',{exact:true}).press('Tab');
   const beforePaint=await page.evaluate(()=>({hash:window.__EZ_ENVIRONMENT__.environment.placement.hash,brushes:window.__EZ_ENVIRONMENT__.environment.options.brushes.length,exclusions:window.__EZ_ENVIRONMENT__.environment.options.exclusions.length}));
@@ -277,13 +291,17 @@ try{
     await page.locator('#tab-parameters select').first().selectOption(presetName);
     await page.evaluate(()=>window.__EZ_ENVIRONMENT__.studio.fit());
     await page.waitForFunction(()=>{const tree=window.__EZ_ENVIRONMENT__.tree;return tree.leavesMesh.material.map?.image?.width>0;});
-    const counts=[];
-    for(const lod of ['Full','LOD1','LOD2']){
-      await page.locator('.lod-switcher').getByRole('button',{name:lod,exact:true}).click();
-      counts.push(await page.evaluate(()=>{let count=0;window.__EZ_ENVIRONMENT__.tree.traverse(o=>{if(o.geometry)count+=(o.geometry.index?.count||o.geometry.attributes.position.count)/3;});return count;}));
-    }
-    assert.ok(counts[0]>counts[1]&&counts[1]>counts[2]);record(`${presetName} tree LOD preview`,{counts});
-    await page.locator('.lod-switcher').getByRole('button',{name:'Full',exact:true}).click();
+    // The studio hides the legacy LOD overlay. Check the same geometry API
+    // without activating controls that users cannot access in this layout.
+    const counts=await page.evaluate(()=>{
+      const tree=window.__EZ_ENVIRONMENT__.tree;
+      return tree.constructor.defaultLODLevels.map(level=>{
+        const geometries=Object.values(tree.createGeometry(level.detail??{}));
+        try{return geometries.reduce((sum,geometry)=>sum+(geometry.index?.count||geometry.attributes.position.count)/3,0);}
+        finally{geometries.forEach(geometry=>geometry.dispose());}
+      });
+    });
+    assert.ok(counts[0]>counts[1]&&counts[1]>counts[2]);record(`${presetName} tree LOD generation`,{counts});
     await screenshot(`tree-${presetName.replaceAll(' ','-').toLowerCase()}`);
     await page.locator('#ui-container [data-tab="export"]').click();
     const stem=presetName.replaceAll(' ','-').toLowerCase();

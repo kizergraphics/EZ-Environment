@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { GLTFLoader } from 'three/examples/jsm/Addons.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { simplex2d } from './noise';
 
 let loaded = false;
