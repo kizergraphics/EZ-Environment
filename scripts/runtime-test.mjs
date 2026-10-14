@@ -254,7 +254,7 @@ try{
     assert.ok(integration.registered&&integration.custom&&integration.recordsMatch&&integration.count>0);record(`${form} asset integrates into environment ${layer} layer`,integration);
   }
   await screenshot('environment-custom-assets');
-  await page.locator('#studio-panel summary').filter({hasText:'Paint density & exclusions'}).click();
+  await openDetails(page.locator('#studio-panel details:has(> summary:text-is("Paint density & exclusions"))'));
   await page.locator('#studio-panel').getByLabel('Brush enabled',{exact:true}).check();
   await page.locator('#studio-panel').getByLabel('Brush radius · m',{exact:true}).fill('12');await page.locator('#studio-panel').getByLabel('Brush radius · m',{exact:true}).press('Tab');
   const beforePaint=await page.evaluate(()=>({hash:window.__EZ_ENVIRONMENT__.environment.placement.hash,brushes:window.__EZ_ENVIRONMENT__.environment.options.brushes.length,exclusions:window.__EZ_ENVIRONMENT__.environment.options.exclusions.length}));
