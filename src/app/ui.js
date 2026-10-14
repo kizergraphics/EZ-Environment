@@ -6,7 +6,6 @@ import { zipSync } from 'three/addons/libs/fflate.module.js';
 import { Billboard, Tree, TreeType } from 'ez-environment';
 import { APP_TREE_PRESET_NAMES, BarkType, LeafType, applyTreeTextures, loadPresetWithTextures } from './textures';
 import { Environment } from './environment';
-import { OrbitControls } from 'three/examples/jsm/Addons.js';
 import { version } from '../../package.json';
 import { cleanTreeDefinition,prepareTreeProject,commitTreeProject } from './studio/tree-project.js';
 
@@ -453,7 +452,7 @@ let controls = [];
  * @param {THREE.WebGLRenderer} renderer
  * @param {THREE.Scene} scene
  * @param {THREE.Camera} camera
- * @param {OrbitControls} orbitControls
+ * @param {import('three/addons/controls/OrbitControls.js').OrbitControls} orbitControls
  * @param {String} initialPreset
  */
 export function setupUI(tree, environment, renderer, scene, camera, orbitControls, initialPreset, onTreeChanged = () => {}) {
