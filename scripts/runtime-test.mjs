@@ -291,13 +291,17 @@ try{
     await page.locator('#tab-parameters select').first().selectOption(presetName);
     await page.evaluate(()=>window.__EZ_ENVIRONMENT__.studio.fit());
     await page.waitForFunction(()=>{const tree=window.__EZ_ENVIRONMENT__.tree;return tree.leavesMesh.material.map?.image?.width>0;});
-    const counts=[];
-    for(const lod of ['Full','LOD1','LOD2']){
-      await page.locator('.lod-switcher').getByRole('button',{name:lod,exact:true}).click();
-      counts.push(await page.evaluate(()=>{let count=0;window.__EZ_ENVIRONMENT__.tree.traverse(o=>{if(o.geometry)count+=(o.geometry.index?.count||o.geometry.attributes.position.count)/3;});return count;}));
-    }
-    assert.ok(counts[0]>counts[1]&&counts[1]>counts[2]);record(`${presetName} tree LOD preview`,{counts});
-    await page.locator('.lod-switcher').getByRole('button',{name:'Full',exact:true}).click();
+    // The studio hides the legacy LOD overlay. Check the same geometry API
+    // without activating controls that users cannot access in this layout.
+    const counts=await page.evaluate(()=>{
+      const tree=window.__EZ_ENVIRONMENT__.tree;
+      return tree.constructor.defaultLODLevels.map(level=>{
+        const geometries=Object.values(tree.createGeometry(level.detail??{}));
+        try{return geometries.reduce((sum,geometry)=>sum+(geometry.index?.count||geometry.attributes.position.count)/3,0);}
+        finally{geometries.forEach(geometry=>geometry.dispose());}
+      });
+    });
+    assert.ok(counts[0]>counts[1]&&counts[1]>counts[2]);record(`${presetName} tree LOD generation`,{counts});
     await screenshot(`tree-${presetName.replaceAll(' ','-').toLowerCase()}`);
     await page.locator('#ui-container [data-tab="export"]').click();
     const stem=presetName.replaceAll(' ','-').toLowerCase();
