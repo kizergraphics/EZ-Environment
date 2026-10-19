@@ -47,7 +47,7 @@
     "test:desktop:portable": "node scripts/desktop-portable-smoke.mjs"
   },
   "devDependencies": {
-    "@playwright/test": "^1.64.0",
+    "@playwright/test": "^1.64.1",
     "@types/three": "^0.169.0",
     "@typescript/typescript6": "^6.0.2",
     "electron": "^44.7.0",
