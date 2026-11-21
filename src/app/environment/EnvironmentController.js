@@ -185,7 +185,7 @@ export class EnvironmentController extends THREE.Group {
   releaseBatch(b){b.root.removeFromParent();b.root.traverse(o=>{if(o.isInstancedMesh)o.dispose();});}
   createGround(options=this.options,maps=null){
     const g=createTerrainGeometry(options);
-    try { const ground=new THREE.Mesh(g,this.biomeMaterials.ground(options,maps,g));ground.name='Terrain';ground.receiveShadow=true;return ground; }
+    try { const ground=new THREE.Mesh(g,this.biomeMaterials.ground(options,maps));ground.name='Terrain';ground.receiveShadow=true;return ground; }
     catch (error) { g.dispose(); throw error; }
   }
   applyStoneMaterials(maps,options){

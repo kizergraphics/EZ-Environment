@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { ConvexGeometry } from 'three/addons/geometries/ConvexGeometry.js';
 import { slabGeometry, formationLayout, stoneSurface } from './rock-forms.js';
+import { validateTriangleTargets } from './triangle-targets.js';
 
 // All dimensions are meters. Definitions are data, so they can be saved without
 // serializing a Three.js scene and regenerated identically on another machine.
@@ -163,6 +164,9 @@ export function createRockDefinition(archetype = 'rock', overrides = {}) {
       'Rock color must be a six-digit hex color, for example #787d7a.',
     );
   result.color = result.color.toLowerCase();
+  const triangleTargets = validateTriangleTargets(result.triangleTargets);
+  if (triangleTargets) result.triangleTargets = triangleTargets;
+  else delete result.triangleTargets;
   return result;
 }
 

@@ -1,12 +1,18 @@
 # Grass plane editor
 
-In Plant Studio, choose **Grass → Alpha texture cards**, pick a **Clump layout**,
-then open **Grass plane editor → Edit grass planes**.
+In Plant Studio, choose **Grass → Alpha texture cards**, then choose a **Grass
+type**. Meadow Grass and eight additional types each have 12 distinct blade
+images and a seed-head image. The default **12-plane clump** uses each foliage
+image once and retains six planes at LOD 1 and three at LOD 2.
+
+Open **Grass plane editor → Edit grass planes** to adjust the individual cards.
+Smaller layouts are available in **Clump layout**.
 
 Select a numbered plane. Its yellow outline identifies the PNG card in the
 viewport. Use **Move** arrows or **Rotate** rings, or enter exact offsets and
 angles. Width/height multipliers resize just that plane. **Plane PNG** chooses a
-different atlas cutout; the preview shows the selected artwork. Horizontal flip
+different cutout of the selected grass type. The preview shows the selected
+artwork. Automatic assignments avoid reusing manually selected images. Horizontal flip
 mirrors the artwork without changing the plane's position. Wind pauses while
 editing. The editor operates on Full detail; LOD previews hide the gizmo.
 

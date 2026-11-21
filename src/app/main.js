@@ -4,17 +4,18 @@ import { createScene } from './scene.js';
 import { Studio } from './studio/studio.js';
 import { updateTreeWind } from './environment/wind.js';
 import { createRenderPipeline } from './rendering.js';
+import { triangleSimplifierReady } from './generators/triangle-targets.js';
 
 async function start(){
   const container=document.getElementById('app');
   const renderer=new THREE.WebGLRenderer({antialias:true,preserveDrawingBuffer:true});
   renderer.setSize(Math.max(1,container.clientWidth),Math.max(1,container.clientHeight),false);
   renderer.setPixelRatio(Math.min(devicePixelRatio,2));
-  renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;
+  renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFShadowMap;
   renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=1.0;
   renderer.outputColorSpace=THREE.SRGBColorSpace;
   container.appendChild(renderer.domElement);
-  const context=await createScene(renderer);
+  const [context]=await Promise.all([createScene(renderer),triangleSimplifierReady]);
   const {scene,environment,tree,forest,camera,controls}=context;
   let studio;
   const renderPipeline=createRenderPipeline({...context,renderer,container,getMode:()=>studio?.mode});
@@ -23,11 +24,11 @@ async function start(){
   studio=new Studio({...context,renderer,render,syncSceneAppearance,capturePNG,refreshTreeUI:treeUI.refresh});
   const app={...context,renderer,studio,renderPipeline,ready:false,get mode(){return studio.mode;},render,syncSceneAppearance,capturePNG};
   window.__EZ_ENVIRONMENT__=app;
-  const clock=new THREE.Clock(),hud=document.getElementById('performance-hud');
+  const hud=document.getElementById('performance-hud');
   let frames=0,lastHUD=performance.now(),lastFrame=performance.now();
   const timings=new Float64Array(1800);let timingIndex=0;
   function animate(){
-    const now=performance.now(),t=clock.getElapsedTime();timings[timingIndex++%timings.length]=now-lastFrame;lastFrame=now;
+    const now=performance.now(),t=(now-animationStart)/1000;timings[timingIndex++%timings.length]=now-lastFrame;lastFrame=now;
     if(environment.visible)environment.update(t,camera);
     if(tree.visible)updateTreeWind(tree,environment.wind,camera,t);
     if(forest.visible)for(const o of forest.children)if(o.visible)updateTreeWind(o,environment.wind,camera,t);
@@ -42,6 +43,7 @@ async function start(){
   renderPipeline.resize();render();
   app.ready=true;
   document.getElementById('loading-screen').hidden=true;
+  const animationStart=performance.now();
   animate();
   app.runBenchmark=async({duration=30000,warmup=10000,replay=true}={})=>{
     const previous=controls.enabled;controls.enabled=false;

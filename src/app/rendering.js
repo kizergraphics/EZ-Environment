@@ -84,7 +84,7 @@ export function createRenderPipeline({ renderer, scene, camera, environment, con
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.toneMappingExposure = options.lighting.exposure;
     renderer.shadowMap.enabled = quality !== 'low';
-    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.shadowMap.type = THREE.PCFShadowMap;
     environment.skybox.configure(options.lighting, quality, mode === 'tree' ? 55 : options.radius);
     fog.color.set(options.lighting.fog);
     fog.density = options.lighting.fogDensity;

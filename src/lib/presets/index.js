@@ -15,6 +15,7 @@ import pineMedium from './pine_medium.json';
 import pineLarge from './pine_large.json';
 import trellis from './trellis.json';
 import TreeOptions from '../options';
+import { treeSpeciesPresets } from './tree-species';
 
 export const TreePreset = {
   'Ash Small': ashSmall,
@@ -32,6 +33,7 @@ export const TreePreset = {
   'Pine Small': pineSmall,
   'Pine Medium': pineMedium,
   'Pine Large': pineLarge,
+  ...treeSpeciesPresets,
   'Trellis': trellis,
 };
 

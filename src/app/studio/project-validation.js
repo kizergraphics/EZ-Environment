@@ -48,6 +48,7 @@ export function validateTreeProject(input, defaults) {
   // valid authored values although the current texture slider ends at 5.
   range(result.bark.textureScale.x,'Bark texture scale X',.5,10);range(result.bark.textureScale.y,'Bark texture scale Y',.5,10);
   range(result.leaves.angle,'Leaf angle',0,100);range(result.leaves.start,'Leaf start',0,1);
+  range(result.leaves.angleVariance,'Leaf angle variation',0,60);
   range(result.leaves.count,'Leaf count',0,100,true);range(result.leaves.size,'Leaf size',0,10);
   range(result.leaves.sizeVariance,'Leaf size variance',0,1);range(result.leaves.alphaTest,'Leaf alpha test',0,1);
   range(result.trellis.spacing,'Trellis spacing',.5,10);range(result.trellis.width,'Trellis width',1,50);range(result.trellis.height,'Trellis height',1,50);
@@ -55,6 +56,6 @@ export function validateTreeProject(input, defaults) {
   range(result.trellis.force.strength,'Trellis force strength',0,.2);range(result.trellis.force.maxDistance,'Trellis force distance',.5,20);range(result.trellis.force.falloff,'Trellis force falloff',.1,3);
   range(result.trellis.cylinderRadius,'Trellis cylinder radius',.01,.5);
   for(const [name,value]of [['Bark tint',result.bark.tint],['Leaf tint',result.leaves.tint],['Trellis color',result.trellis.color]])range(value,name,0,0xffffff,true);
-  if(!['deciduous','evergreen'].includes(result.type)||!['single','double'].includes(result.leaves.billboard)||!Object.values(LeafType).includes(result.leaves.type)||!Object.hasOwn(BarkType,result.bark.type))throw new Error('Unknown tree type, leaf, or bark preset.');
+  if(!['deciduous','evergreen'].includes(result.type)||!['single','double'].includes(result.leaves.billboard)||!Object.values(LeafType).includes(result.leaves.type)||!Object.values(BarkType).includes(result.bark.type))throw new Error('Unknown tree type, leaf, or bark preset.');
   return result;
 }

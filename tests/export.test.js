@@ -111,10 +111,10 @@ function fixture() {
 
 test('biome appearance metadata is detached and discloses viewport effects omitted from packs', async () => {
   const environment=fixture();
-  environment.options={...environment.options,biome:'desert',appearance:'photorealistic',lighting:{sky:'#80a7bb',exposure:1.05}};
+  environment.options={...environment.options,biome:'meadow',appearance:'photorealistic',lighting:{sky:'#80a7bb',exposure:1.05}};
   const manifest=createEnvironmentManifest(environment);
   assert.equal(manifest.presentation.appearance,'photorealistic');
-  assert.equal(manifest.presentation.biome,'desert');
+  assert.equal(manifest.presentation.biome,'meadow');
   assert.doesNotMatch(manifest.presentation.limitations.join(' '),/terrain material blending|procedural source-asset LODs/);
   assert.match(manifest.presentation.materialFallback,/embedded base color, normal, and roughness/);
   assert.match(manifest.presentation.limitations.join(' '),/ambient occlusion/);

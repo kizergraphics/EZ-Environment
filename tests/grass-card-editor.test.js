@@ -1,12 +1,62 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { existsSync } from 'node:fs';
 import { ObjectLoader, PerspectiveCamera, Scene } from 'three';
 import { createPlantDefinition, generatePlant } from '../src/app/generators/plants.js';
 import { applyGrassCardEdits, defaultGrassCardEdit, grassCardCount, validateGrassCardEdits } from '../src/app/generators/grass-cards.js';
 import { GrassCardEditor } from '../src/app/studio/grass-card-editor.js';
+import { GRASS_TYPES, GRASS_TWELVE_LAYOUT, GRASS_VARIANTS, grassAtlas, grassAtlasId } from '../src/app/generators/grass-atlases.js';
 
 const edits=layout=>Array.from({length:grassCardCount(layout)},defaultGrassCardEdit);
 const vertices=asset=>Array.from(asset.lods[0].children[0].geometry.attributes.position.array);
+
+const planeUV = (geometry, index) => {
+  const atlasUV = geometry.attributes.uv.array;
+  return [...atlasUV.slice(index * 8, (index + 1) * 8)];
+};
+
+test('nine grass types each use twelve distinct PNG regions and retain the same cards through LODs', () => {
+  assert.ok(Object.keys(GRASS_TYPES).length >= 8);
+  const texturePaths = new Set();
+  for (const grassAtlasType of Object.keys(GRASS_TYPES)) {
+    const definition = createPlantDefinition('grass', { grassAtlas: grassAtlasType, cardLayout: GRASS_TWELVE_LAYOUT });
+    const atlas = grassAtlas(grassAtlasId(definition));
+    assert.ok(existsSync(new URL(`../src/app/public${atlas.path}`, import.meta.url)));
+    assert.ok(!texturePaths.has(atlas.path), `${grassAtlasType} shares another grass type's atlas`);
+    texturePaths.add(atlas.path);
+    assert.ok(GRASS_VARIANTS.every((variant) => atlas.regions[variant]));
+    const asset = generatePlant(JSON.parse(JSON.stringify(definition)));
+    try {
+      assert.deepEqual(asset.lods.map((lod) => lod.userData.triangles), [24, 12, 6]);
+      const full = asset.lods[0].children[0].geometry;
+      assert.equal(new Set(full.userData.cardIndices.map((i) => planeUV(full, i).join(','))).size, 12);
+      for (const lod of asset.lods.slice(1)) {
+        const geometry = lod.children[0].geometry;
+        for (const [slot, index] of geometry.userData.cardIndices.entries()) {
+          assert.deepEqual(planeUV(geometry, slot), planeUV(full, index));
+        }
+      }
+    } finally { asset.dispose(); }
+  }
+});
+
+test('a manually assigned PNG keeps the other eleven automatic variants distinct', () => {
+  const cards = edits(GRASS_TWELVE_LAYOUT);
+  cards[0].texture = 'variant-12';
+  const definition = createPlantDefinition('grass', {
+    seed: 0,
+    grassAtlas: 'purple-fountain',
+    cardLayout: GRASS_TWELVE_LAYOUT,
+    grassCardEdits: { [GRASS_TWELVE_LAYOUT]: cards },
+  });
+  const asset = generatePlant(definition);
+  try {
+    const geometry = asset.lods[0].children[0].geometry;
+    assert.equal(new Set(cards.map((_, i) => planeUV(geometry, i).join(','))).size, 12);
+    const [left, bottom] = grassAtlas('purple-fountain').regions['variant-12'].uv;
+    assert.deepEqual(planeUV(geometry, 0).slice(0, 2), [Math.fround(left), Math.fround(bottom)]);
+  } finally { asset.dispose(); }
+});
 
 test('grass editor can create and dispose its transform gizmo with the installed Three.js',()=>{
   const scene=new Scene();

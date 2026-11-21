@@ -15,10 +15,11 @@ try {
   page.on('pageerror', error => errors.push(error.message));
   page.on('console', message => { if(message.type()==='error') errors.push(message.text()); });
   await page.route('**/grass-qa', route => route.fulfill({ contentType:'text/html', body:'<!doctype html><html><head><style>body{margin:0;background:#ced3d5;font:16px Arial;color:#263332}canvas{display:block}#labels{display:flex;justify-content:space-around;position:absolute;bottom:24px;left:0;right:0;font-weight:600}</style></head><body><div id="labels"></div></body></html>' }));
-  await page.goto('http://127.0.0.1:5197/grass-qa');
+  await page.goto(new URL('/grass-qa', process.env.EZ_TEST_URL || 'http://127.0.0.1:5197').href);
   const result = await page.evaluate(async ({ threePath }) => {
     const THREE = await import(threePath);
-    const {createPlantDefinition,generatePlant,GRASS_CARD_LAYOUTS}=await import('/generators/plants.js');
+    const {createPlantDefinition,generatePlant}=await import('/generators/plants.js');
+    const legacyLayouts=['sparseCross','staggeredStar','naturalOffset','denseTuft'];
     const {prepareAssetMaterials}=await import('/materials/pbr.js');
     const {exportGLB}=await import('/export/exporters.js');
     const {GLTFLoader}=await import(threePath.replace('/build/three.module.js','/examples/jsm/loaders/GLTFLoader.js'));
@@ -32,7 +33,7 @@ try {
     const floor=new THREE.Mesh(new THREE.PlaneGeometry(100,100),new THREE.MeshStandardMaterial({color:'#a5aba1',roughness:1}));floor.rotation.x=-Math.PI/2;floor.position.y=-.01;scene.add(floor);
     const camera=new THREE.PerspectiveCamera(34,1500/840,.01,100);
     const assets=[];
-    for(const [index,cardLayout] of GRASS_CARD_LAYOUTS.entries()){
+    for(const [index,cardLayout] of legacyLayouts.entries()){
       const asset=generatePlant(createPlantDefinition('grass',{cardLayout,height:1,width:1,seed:7106}));
       await prepareAssetMaterials(asset);asset.object3D.position.x=(index-1.5)*1.65;scene.add(asset.object3D);assets.push(asset);
     }

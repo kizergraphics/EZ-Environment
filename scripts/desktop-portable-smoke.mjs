@@ -270,9 +270,13 @@ try {
   }
   await page.evaluate(()=>window.__EZ_ENVIRONMENT__.studio.setMode('tree'));
   await page.evaluate(()=>window.__EZ_ENVIRONMENT__.studio.setMode('environment'));
-  for(const biome of process.env.EZ_PORTABLE_SURFACE_ONLY==='1'?[]:['forest','desert','meadow','rocky'])for(const appearance of ['naturalistic','photorealistic']){
+  assert.equal(await page.locator('.biome-card').count(), 0);
+  assert.equal(await page.locator('#studio-panel').getByText('Meadow', { exact: true }).count(), 1);
+  assert.equal(await page.getByRole('button', { name: 'Reset preset', exact: true }).count(), 1);
+  const biome = 'meadow';
+  for(const appearance of process.env.EZ_PORTABLE_SURFACE_ONLY==='1'?[]:['naturalistic','photorealistic']){
     const result=await page.evaluate(async({biome,appearance})=>{
-      const a=window.__EZ_ENVIRONMENT__,s=a.studio;await s.applyBiomePreset(biome);await s.envChange({appearance},{modified:false});s.cameraPreset('ground');a.render();
+      const a=window.__EZ_ENVIRONMENT__,s=a.studio;await s.resetMeadowPreset();await s.envChange({appearance},{modified:false});s.cameraPreset('ground');a.render();
       return{biome:a.environment.options.biome,appearance:a.environment.options.appearance,hash:a.environment.placement.hash,ready:a.environment.ready&&!a.environment.loading,draws:a.renderPipeline.lastDraw.calls};
     },{biome,appearance});
     assert.equal(result.biome,biome);assert.equal(result.appearance,appearance);assert.ok(result.ready&&result.draws>0);

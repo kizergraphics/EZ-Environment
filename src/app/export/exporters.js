@@ -8,6 +8,8 @@ import { selectAssetAppearance } from '../environment/biome-species.js';
 import { selectRockVariant } from '../generators/rocks.js';
 import { awaitTextureReadiness } from '../materials/readiness.js';
 import { prepareAssetMaterials, assertPbrReady } from '../materials/pbr.js';
+import { triangleCount, triangleSimplifierReady } from '../generators/triangle-targets.js';
+import { createTreeLODAsset } from '../generators/tree-lods.js';
 import {
   zipSync,
   strToU8,
@@ -44,17 +46,6 @@ function filename(value, fallback) {
       .slice(0, 100) || fallback
   );
 }
-function triangleCount(object) {
-  let count = 0;
-  object.traverse((child) => {
-    if (child.isMesh)
-      count +=
-        (child.geometry.index?.count ??
-          child.geometry.attributes.position.count) / 3;
-  });
-  return count;
-}
-
 /** Same multiplication order as the viewport: terrain alignment, then local yaw. */
 export function placementTransform(record) {
   if (record.rotation !== undefined) {
@@ -119,6 +110,15 @@ export async function exportGLB(object, name, options = {}) {
     // Browser exports are finished surfaces. DOM-free geometry tools retain the
     // existing mesh-only API; explicitly opt in to full validation there.
     assertPbrReady(copy, { requireAll: options.requireTextures ?? typeof document !== 'undefined' });
+    copy.traverse(node => {
+      for (const material of Array.isArray(node.material) ? node.material : [node.material]) {
+        if (material?.metalness === 0 && !material.metalnessMap && material.roughnessMap?.colorSpace === THREE.NoColorSpace) {
+          // glTF reads roughness from green and multiplies blue by the zero
+          // metallic factor. The existing map already carries all needed data.
+          material.metalnessMap = material.roughnessMap;
+        }
+      }
+    });
     checkAbort(options.signal);
     result = await new GLTFExporter().parseAsync(copy, {
       binary: true,
@@ -900,6 +900,8 @@ function treeDefinition(tree) {
     version: 1,
     archetype: 'tree',
     ...source,
+    targetHeight: tree.targetHeight,
+    triangleTargets: tree.triangleTargets,
     bark: { ...source.bark, maps: undefined },
     trellis: { ...source.trellis, maps: undefined, endMaps: undefined },
     leaves: { ...source.leaves, map: undefined, normalMap: undefined, roughnessMap: undefined },
@@ -948,41 +950,17 @@ export async function exportScenePack(environment, treesArray, options = {}) {
   const generated = new Set();
   const chunkSize = environment.options.chunkSize ?? 48;
   try {
+    if (treesArray.some((tree) => tree.triangleTargets)) await triangleSimplifierReady;
     for (const tree of treesArray) {
       checkAbort(options.signal);
       const { definition, id } = treeDefinition(tree);
       if (!registry.has(id)) {
-        const levels = tree.constructor.defaultLODLevels;
-        if (!Array.isArray(levels) || levels.length !== 3)
-          throw new Error('Expected three default tree LOD definitions.');
-        const lods = levels.map((level, index) => {
-          const geometry = tree.createGeometry(level.detail ?? {});
-          generated.add(geometry.branches);
-          generated.add(geometry.leaves);
-          const group = new THREE.Group();
-          group.name = `lod${index}`;
-          group.userData = { archetype: 'tree', wind: true };
-          const branches = new THREE.Mesh(
-            geometry.branches,
-            tree.branchesMesh.material,
-          );
-          branches.name = 'Branches';
-          const leaves = new THREE.Mesh(
-            geometry.leaves,
-            tree.leavesMesh.material,
-          );
-          leaves.name = 'Leaves';
-          leaves.userData.wind = true;
-          group.add(branches, leaves);
-          if (tree.trellisMesh) group.add(tree.trellisMesh.clone(true));
-          group.updateMatrixWorld(true);
-          return group;
-        });
-        const length = definition.branch.length[0],
+        const asset = createTreeLODAsset(tree, definition);
+        generated.add(asset);
+        const length = definition.branch.length[0] * (asset.heightAdjustment?.woodScale ?? 1),
           radius = definition.branch.radius[0];
         registry.set(id, {
-          lods,
-          object3D: lods[0],
+          ...asset,
           definition,
           definitionHash: id,
           collider: options.treeColliders

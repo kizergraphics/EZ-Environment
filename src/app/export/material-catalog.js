@@ -219,7 +219,7 @@ export async function appendMaterialCatalog(files, { signal } = {}) {
     }
     files['textures/SOURCES.md'] = encoder.encode(
       decoder.decode(files['textures/SOURCES.md']) +
-        '\nGenerated plant foliage uses an ImageGen leaf-interior source; see plant-provenance.json. Stem, petal, pollen and retained tree microdetail are original analytic code under the project MIT license (LICENSE.txt). Authored maps, generated albedos and derived normal/roughness maps are artistic approximations, not measured scans. See biome-provenance.json for biome records.\n',
+        '\nPlant surfaces and exposed wood use bundled artwork and matching normal and roughness files. See plant-provenance.json, wood-provenance.json and biome-provenance.json for source records. The normal and roughness companions are artistic derivatives of the source artwork.\n',
     );
   }
   return 'materials.json';

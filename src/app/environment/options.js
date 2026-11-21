@@ -37,8 +37,12 @@ export function validateOptions(input = {}) {
   if (!QUALITY[o.quality]) throw new Error('Quality must be low, medium, or high.');
   if(!['meadow','forest','desert','rocky','woodland'].includes(o.biome))throw new Error('Unknown biome.');
   if(!['legacy','biome'].includes(o.composition)||!['naturalistic','photorealistic'].includes(o.appearance))throw new Error('Unknown composition or appearance.');
-  if(o.composition==='biome'&&o.biome==='woodland')o.biome='forest';
   if(typeof o.includeAuthoredTree!=='boolean'||typeof o.modified!=='boolean')throw new Error('Invalid biome flags.');
+  // Older projects can keep their authored settings under the Meadow preset.
+  if (o.biome !== 'meadow') {
+    o.biome = 'meadow';
+    if (o.composition === 'biome') o.modified = true;
+  }
   o.lighting={...DEFAULT_OPTIONS.lighting,...o.lighting};
   for(const key of ['sky','horizon','fog','sun'])if(!/^#[0-9a-f]{6}$/i.test(o.lighting[key]))throw new Error(`Invalid lighting ${key}.`);
   for(const [key,min,max] of [['fogDensity',0,.03],['elevation',5,85],['intensity',0,8],['ambient',0,4],['exposure',.2,2]])number(o.lighting[key],`Lighting ${key}`,min,max);

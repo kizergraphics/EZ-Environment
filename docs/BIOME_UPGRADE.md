@@ -1,6 +1,6 @@
 # Biome and viewport upgrade
 
-Forest, Desert, Meadow, and Rocky now apply a complete composition: terrain shape, surface materials, tree placement, understory, stones, lighting, atmosphere, and wind. Select a biome card in Environment mode to apply its preset. The reset action restores preset-controlled settings; seed, world size, authored assets, painted strokes, and density maps remain. The former automatic central tree is optional in Environment mode and remains available in Tree mode.
+Meadow is now the only environment preset. **Reset preset** restores its terrain, scatter, lighting, and wind settings and retains the world seed, size, authored assets, paint, and density maps. Older projects can still open with their saved settings. The screenshots and performance results below document the earlier four-biome release.
 
 The toolbar separates **Appearance** from **Quality**. Naturalistic uses the efficient material path; Photorealistic adds photographic foliage variants and finer surface detail, with contact shading at Medium/High. Both appearances keep identical placements and tree transforms. Quality adjusts visible detail and budgets. Photorealistic is an interactive rendering mode, not a path-traced or measured-material guarantee.
 
@@ -8,7 +8,7 @@ The toolbar separates **Appearance** from **Quality**. Naturalistic uses the eff
 
 - Resize the right inspector by dragging its divider or using the divider's left/right arrow keys. Clean view hides the inspector; the camera and render canvas resize with the available space.
 - Use Overview, Ground-level, and Top cameras, or save and recall three camera bookmarks. Tree, Plant, Rock, and Environment remember independent camera positions.
-- Painting shows a terrain-following brush outline. Hold Shift and click the terrain to apply a stroke. Undo/redo supports biome changes, environment parameters, and paint.
+- Painting shows a terrain-following brush outline. Hold Shift and click the terrain to apply a stroke. Undo/redo supports preset resets, environment parameters, and paint.
 - Export PNG at viewport size, 1920 × 1080, or 3840 × 2160. Capture uses the same lighting and rendering path as the viewport and restores its camera/render state afterward.
 - New project files use version 2 and preserve appearance, lighting, camera positions, bookmarks, masks, and authored assets. Version 1 files retain their legacy composition and layer values until a complete biome preset is explicitly applied.
 

@@ -36,14 +36,14 @@ try{
   await page.evaluate(async()=>{const s=window.__EZ_ENVIRONMENT__.studio;await s.setMode('plant');s.change('height',2.75);await s.setMode('environment');});
   assert.equal(await page.evaluate(()=>window.__EZ_ENVIRONMENT__.studio.asset.definition.height),2.75);
   record('Switching immediately after an edit previews the final definition');
-  for(const biome of ['desert','forest','rocky','meadow']){
+  for(const form of ['dunes','ridges','rolling']){
     const before=await page.evaluate(()=>{const s=window.__EZ_ENVIRONMENT__.studio;return s.controls.target.y-s.viewportGroup.position.y;});
-    await page.evaluate(async biome=>{await window.__EZ_ENVIRONMENT__.studio.applyBiomePreset(biome);},biome);
+    await page.evaluate(async form=>{const a=window.__EZ_ENVIRONMENT__;await a.studio.envChange({terrain:{...a.environment.options.terrain,form}});},form);
     const result=await page.evaluate(async()=>{const a=window.__EZ_ENVIRONMENT__,s=a.studio,{terrainHeight}=await import('/environment/placement.js');return{visible:s.viewportGroup.visible,height:s.viewportGroup.position.y,expected:terrainHeight(0,0,a.environment.options),latest:s.lastAuthoredMode,relativeTarget:s.controls.target.y-s.viewportGroup.position.y,clearance:a.environment.lod.uniforms.ezPreviewRadius.value};});
     assert.ok(result.visible);assert.equal(result.latest,'plant');assert.equal(result.height,result.expected);
     assert.ok(Math.abs(result.relativeTarget-before)<1e-6);assert.ok(result.clearance>=3);
   }
-  record('Latest item remains visible and follows terrain through all four biomes');
+  record('Latest item remains visible and follows terrain through custom Meadow landforms');
   for(const appearance of ['photorealistic','naturalistic']){
     await page.evaluate(async appearance=>{const s=window.__EZ_ENVIRONMENT__.studio;await s.envChange({appearance},{modified:false});await s.setMode('rock');},appearance);
     assert.ok(await page.evaluate(()=>window.__EZ_ENVIRONMENT__.environment.visible));

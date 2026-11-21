@@ -1,11 +1,20 @@
-import * as THREE from 'three';
 import { TreePreset } from 'ez-environment';
-import { getBotanicalMaps } from './materials/pbr.js';
-import { registerTextureReadiness } from './materials/readiness.js';
+import { companionMaps, getSurfaceMaps } from './materials/surface-maps.js';
 import { getWoodMaps } from './materials/wood-surface.js';
 
-// Bark keys map 1:1 to ambientcg directories under /textures/bark/.
-// Add or remove entries to expose more variants in the UI dropdown.
+const speciesSurfaces = {
+  'Paper Birch': 'paper-birch',
+  'Weeping Willow': 'weeping-willow',
+  'Sugar Maple': 'sugar-maple',
+  Ginkgo: 'ginkgo',
+  'Blue Spruce': 'blue-spruce',
+  'Coast Redwood': 'coast-redwood',
+  'Lebanon Cedar': 'lebanon-cedar',
+  'Fan Palm': 'fan-palm',
+};
+const speciesIds = new Set(Object.values(speciesSurfaces));
+
+// The numbered bark presets resolve to the original ambientCG material sets.
 export const BarkType = {
   Bark001: 'Bark001',
   Bark002: 'Bark002',
@@ -18,13 +27,16 @@ export const BarkType = {
   Bark013: 'Bark013',
   Bark014: 'Bark014',
   Bark015: 'Bark015',
+  ...speciesSurfaces,
 };
+const barkIds = new Set(Object.values(BarkType));
 
 export const LeafType = {
   Ash: 'ash',
   Aspen: 'aspen',
   Oak: 'oak',
   Pine: 'pine',
+  ...speciesSurfaces,
 };
 
 // Bush 1-3 remain public TreePreset entries for library/backward compatibility,
@@ -34,71 +46,28 @@ export const APP_TREE_PRESET_NAMES = Object.freeze(
   Object.keys(TreePreset).filter(name => !PLANT_NATIVE_TREE_PRESETS.has(name)),
 );
 
-const textureLoader = new THREE.TextureLoader();
-const barkCache = new Map();
-const leafCache = new Map();
-
-// Keep failed textures attached so export can report the loading error. Evict
-// their cache entries so regeneration can retry the source files.
-
-function loadTexture(url, onError) {
-  let resolve, reject;
-  const ready = new Promise((yes, no) => { resolve = yes; reject = no; });
-  const texture = textureLoader.load(url, resolve, undefined, error => {
-    onError?.(error);
-    reject(new Error(`Could not load required texture ${url}. Retry generation.`));
-  });
-  registerTextureReadiness(texture, ready);
-  return texture;
-}
-
-function loadColor(url, onError) {
-  const t = loadTexture(url, onError);
-  t.colorSpace = THREE.SRGBColorSpace;
-  return t;
-}
-
-function loadLinear(url, onError) {
-  return loadTexture(url, onError);
-}
-
-/**
- * Returns a cached set of THREE.Texture maps for the given bark type.
- * @param {string} type - one of BarkType values
- * @returns {{ color: THREE.Texture, normal: THREE.Texture, roughness: THREE.Texture } | null}
- */
 export function getBarkMaps(type) {
-  if (!BarkType[type]) return null;
-  if (barkCache.has(type)) return barkCache.get(type);
-
+  if (!barkIds.has(type)) return null;
   const dir = `${type}_1K-JPG`;
   const base = `/textures/bark/${dir}/${dir}`;
-  const maps = {};
-  const drop = (key) => () => {
-    console.warn(`Missing bark texture: ${base}_… (${key}).`);
-    barkCache.delete(type);
-  };
-  maps.color = loadColor(`${base}_Color.jpg`, drop('color'));
-  maps.normal = loadLinear(`${base}_NormalGL.jpg`, drop('normal'));
-  maps.roughness = loadLinear(`${base}_Roughness.jpg`, drop('roughness'));
-  barkCache.set(type, maps);
-  return maps;
+  const species = `/textures/trees/${type}`;
+  const paths = speciesIds.has(type)
+    ? [`${species}/bark-color.jpg`, `${species}/bark-normal.png`, `${species}/bark-roughness.jpg`]
+    : ['_Color.jpg', '_NormalGL.jpg', '_Roughness.jpg'].map(suffix => base + suffix);
+  const { map, normalMap, roughnessMap } = getSurfaceMaps(type, paths);
+  return { color: map, normal: normalMap, roughness: roughnessMap };
 }
 
-/**
- * Returns a cached leaf color texture for the given leaf type.
- * @param {string} type - one of LeafType values
- * @returns {THREE.Texture | null}
- */
+function getLeafMaps(type) {
+  const base = `/textures/trees/${type}`;
+  const paths = speciesIds.has(type)
+    ? [`${base}/leaf-color.png`, `${base}/leaf-normal.png`, `${base}/leaf-roughness.jpg`]
+    : companionMaps(`/textures/leaves/${type}.png`);
+  return getSurfaceMaps(`${type} leaves`, paths, { premultiplyAlpha: true });
+}
+
 export function getLeafMap(type) {
-  if (leafCache.has(type)) return leafCache.get(type);
-  const texture = loadColor(`/textures/leaves/${type}.png`, () => {
-    console.warn(`Missing leaf texture: /textures/leaves/${type}.png.`);
-    leafCache.delete(type);
-  });
-  texture.premultiplyAlpha = true;
-  leafCache.set(type, texture);
-  return texture;
+  return getLeafMaps(type).map;
 }
 
 /**
@@ -114,10 +83,7 @@ export function applyTreeTextures(tree) {
     tree.options.bark.maps.normal = barkMaps.normal;
     tree.options.bark.maps.roughness = barkMaps.roughness;
   }
-  tree.options.leaves.map = getLeafMap(tree.options.leaves.type);
-  const foliage = getBotanicalMaps('foliage');
-  tree.options.leaves.normalMap = foliage.normalMap;
-  tree.options.leaves.roughnessMap = foliage.roughnessMap;
+  Object.assign(tree.options.leaves, getLeafMaps(tree.options.leaves.type));
   tree.options.trellis.maps = getWoodMaps('wood');
   tree.options.trellis.endMaps = getWoodMaps('endgrain');
 }
@@ -131,9 +97,10 @@ export function applyTreeTextures(tree) {
  * caller will generate the tree itself (e.g. via generateLODs)
  */
 export function loadPresetWithTextures(tree, name, generate = true) {
-  const json = structuredClone(TreePreset[name]);
-  if (!json) return;
-  tree.options.copy(json);
+  if (!Object.hasOwn(TreePreset, name)) return;
+  const options = new tree.options.constructor();
+  options.copy(structuredClone(TreePreset[name]));
+  tree.options.copy(options);
   applyTreeTextures(tree);
   if (generate) {
     tree.generate();

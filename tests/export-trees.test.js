@@ -4,6 +4,9 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { strFromU8 } from 'three/addons/libs/fflate.module.js';
 import { Tree } from '../build/ez-tree.es.js';
+import { createTreeLODAsset } from '../src/app/generators/tree-lods.js';
+import { treeHeight, validateTreeHeight } from '../src/app/generators/tree-height.js';
+import { triangleCount, triangleSimplifierReady } from '../src/app/generators/triangle-targets.js';
 import {
   exportScenePack,
   validateManifest,
@@ -54,6 +57,80 @@ function disposeTree(tree) {
   geometry.forEach((g) => g.dispose());
   materials.forEach((m) => m.dispose());
 }
+
+test('scene packs keep each tree’s triangle targets and report the generated LOD sizes', async () => {
+  await triangleSimplifierReady;
+  const source = trees();
+  const [tree, sameDefinition] = source;
+  tree.targetHeight = 18;
+  tree.triangleTargets = [500, 200, 60];
+  const fit = createTreeLODAsset(tree);
+  try {
+    const counts = fit.lods.map(triangleCount);
+    assert.ok(counts[0] > counts[1] && counts[1] > counts[2]);
+    const { manifest, files } = await exportScenePack(environment(), [tree, sameDefinition], { download: false });
+    assert.equal(manifest.assets.length, 2);
+    const withTargets = manifest.assets.find(asset => JSON.parse(strFromU8(files[asset.preset])).triangleTargets);
+    assert.deepEqual(withTargets.lods.map(lod => lod.triangles), counts);
+    const preset = JSON.parse(strFromU8(files[withTargets.preset]));
+    assert.deepEqual(preset.triangleTargets, tree.triangleTargets);
+    assert.equal(preset.targetHeight, 18);
+    const glb = files[withTargets.lods[0].file];
+    const jsonLength = new DataView(glb.buffer, glb.byteOffset).getUint32(12, true);
+    const gltf = JSON.parse(strFromU8(glb.subarray(20, 20 + jsonLength)));
+    const tops = gltf.meshes.flatMap(mesh => mesh.primitives.map(primitive => gltf.accessors[primitive.attributes.POSITION].max[1]));
+    assert.ok(Math.abs(Math.max(...tops) - 18) < .00001);
+  } finally {
+    fit.dispose();
+    source.forEach(disposeTree);
+  }
+});
+
+test('resizing redistributes the existing geometry without changing LOD topology or triangle budgets', async () => {
+  await triangleSimplifierReady;
+  const source = trees();
+  const [tree] = source;
+  tree.triangleTargets = [501, 201, 61];
+  const baseline = createTreeLODAsset(tree);
+  try {
+    for (const height of [.2, 14, 90]) {
+      tree.targetHeight = height;
+      const asset = createTreeLODAsset(tree);
+      try {
+        const [bark, foliage] = asset.lods[0].children;
+        assert.ok(Math.abs(treeHeight(bark.geometry, foliage.geometry) - height) < .00001);
+        assert.ok(asset.lods.every((lod, i) => triangleCount(lod) <= tree.triangleTargets[i]));
+        for (const [level, lod] of asset.lods.entries()) {
+          for (const [part, mesh] of lod.children.entries()) {
+            const { geometry } = mesh;
+            const original = baseline.lods[level].children[part].geometry;
+            assert.deepEqual(geometry.index.array, original.index.array);
+            assert.deepEqual(geometry.attributes.uv.array, original.attributes.uv.array);
+            assert.equal(geometry.getAttribute('leafAnchorY'), undefined);
+            const position = geometry.attributes.position;
+            const from = original.attributes.position;
+            assert.ok(position.array.every(Number.isFinite));
+            for (let i = 0; i < position.count; i++) {
+              assert.equal(position.getX(i), from.getX(i));
+              assert.equal(position.getZ(i), from.getZ(i));
+            }
+          }
+        }
+      } finally { asset.dispose(); }
+    }
+  } finally {
+    baseline.dispose();
+    source.forEach(disposeTree);
+  }
+});
+
+test('optional tree height rejects invalid numbers from saved data', () => {
+  assert.equal(validateTreeHeight(undefined), undefined);
+  assert.equal(validateTreeHeight(12.5), 12.5);
+  for (const height of [null, 0, -5, 1001, Infinity, '12.5']) {
+    assert.throws(() => validateTreeHeight(height), /Tree height/);
+  }
+});
 
 test('real trees export once per definition with explicit LODs and exact world transforms', async () => {
   const source = trees(),

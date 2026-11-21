@@ -8,6 +8,10 @@ import { APP_TREE_PRESET_NAMES, BarkType, LeafType, applyTreeTextures, loadPrese
 import { Environment } from './environment';
 import { version } from '../../package.json';
 import { cleanTreeDefinition,prepareTreeProject,commitTreeProject } from './studio/tree-project.js';
+import { createTreeLODAsset } from './generators/tree-lods.js';
+import { adjustTreeGeometry, TREE_HEIGHT_LIMITS, treeHeight, treeHeightAdjustment, validateTreeHeight } from './generators/tree-height.js';
+import { triangleCount } from './generators/triangle-targets.js';
+import { createTriangleControls } from './studio/triangle-controls.js';
 
 
 // ============================================================================
@@ -108,7 +112,7 @@ const icons = {
 /**
  * Creates a slider control with label
  */
-function createSlider(label, value, min, max, step, onChange) {
+function createSlider(label, value, min, max, step, onChange, onCommit) {
   const container = document.createElement('div');
   container.className = 'control-row';
 
@@ -146,6 +150,7 @@ function createSlider(label, value, min, max, step, onChange) {
     setFill();
     onChange(val);
   });
+  if (onCommit) slider.addEventListener('change', onCommit);
 
   valueInput.addEventListener('change', (e) => {
     let val = parseFloat(e.target.value);
@@ -154,6 +159,7 @@ function createSlider(label, value, min, max, step, onChange) {
     valueInput.value = formatValue(val, step);
     setFill();
     onChange(val);
+    onCommit?.();
   });
 
   sliderWrapper.appendChild(slider);
@@ -163,6 +169,10 @@ function createSlider(label, value, min, max, step, onChange) {
 
   return {
     element: container,
+    setMaximum: (v) => {
+      max = v;
+      slider.max = v;
+    },
     setValue: (v) => {
       slider.value = v;
       valueInput.value = formatValue(v, step);
@@ -529,6 +539,9 @@ export function setupUI(tree, environment, renderer, scene, camera, orbitControl
   // inspected at any camera distance without THREE.LOD auto-switching.
   let previewLevel = 0;
   let lastBuildMs = null;
+  let previewLODs = null;
+  let naturalTreeHeight = treeHeight(tree.branchesMesh.geometry, tree.leavesMesh.geometry);
+  let exportPreviewButton;
   let lastGoodTree=cleanTreeDefinition(tree);
   const notifyTreeChanged=()=>{lastGoodTree=cleanTreeDefinition(tree);onTreeChanged();};
 
@@ -577,15 +590,33 @@ export function setupUI(tree, environment, renderer, scene, camera, orbitControl
     return btn;
   });
 
+  function invalidatePreviewLODs() {
+    previewLODs?.dispose();
+    previewLODs = null;
+  }
+
   function applyLODPreview() {
-    const detail = Tree.defaultLODLevels[previewLevel]?.detail ?? {};
     const t0 = performance.now();
-    const { branches, leaves } = tree.createGeometry(detail);
+    let branches, leaves;
+    let woodScale = 1;
+    if (previewLODs || tree.triangleTargets || tree.targetHeight !== undefined) {
+      previewLODs ??= createTreeLODAsset(tree, undefined, { forPreview: true });
+      const adjustment = treeHeightAdjustment(previewLODs.lods[0], tree.targetHeight);
+      woodScale = adjustment.woodScale;
+      const [bark, foliage] = previewLODs.lods[previewLevel].children;
+      branches = bark.geometry.clone();
+      leaves = foliage.geometry.clone();
+      adjustTreeGeometry(branches, adjustment);
+      adjustTreeGeometry(leaves, adjustment);
+    } else {
+      ({ branches, leaves } = tree.createGeometry(Tree.defaultLODLevels[previewLevel].detail));
+    }
     lastBuildMs = performance.now() - t0;
     tree.branchesMesh.geometry.dispose();
     tree.branchesMesh.geometry = branches;
     tree.leavesMesh.geometry.dispose();
     tree.leavesMesh.geometry = leaves;
+    if (tree.trellisMesh) tree.trellisMesh.scale.y = woodScale;
   }
 
   function setPreviewLevel(level) {
@@ -597,11 +628,11 @@ export function setupUI(tree, environment, renderer, scene, camera, orbitControl
 
   /** Vertex/triangle counts of the geometry currently on screen */
   function displayedCounts() {
-    const gb = tree.branchesMesh.geometry;
-    const gl = tree.leavesMesh.geometry;
+    let vertices = 0;
+    tree.traverse(object => { if (object.isMesh) vertices += object.geometry.attributes.position?.count ?? 0; });
     return {
-      vertices: (gb.attributes.position?.count ?? 0) + (gl.attributes.position?.count ?? 0),
-      triangles: ((gb.index?.count ?? 0) + (gl.index?.count ?? 0)) / 3,
+      vertices,
+      triangles: triangleCount(tree),
     };
   }
 
@@ -614,7 +645,9 @@ export function setupUI(tree, environment, renderer, scene, camera, orbitControl
     const t0 = performance.now();
     const prepared=prepareTreeProject(cleanTreeDefinition(tree),{options:lastGoodTree});commitTreeProject(tree,prepared);
     lastBuildMs = performance.now() - t0;
-    if (previewLevel > 0) {
+    invalidatePreviewLODs();
+    naturalTreeHeight = treeHeight(tree.branchesMesh.geometry, tree.leavesMesh.geometry);
+    if (previewLevel > 0 || tree.triangleTargets || tree.targetHeight !== undefined) {
       applyLODPreview();
     }
     tree.traverse((o) => {
@@ -636,11 +669,16 @@ export function setupUI(tree, environment, renderer, scene, camera, orbitControl
     initialPreset,
     (val) => {
       loadPresetWithTextures(tree, val);
+      tree.triangleTargets = undefined;
+      tree.targetHeight = undefined;
+      invalidatePreviewLODs();
+      naturalTreeHeight = treeHeight(tree.branchesMesh.geometry, tree.leavesMesh.geometry);
       if (previewLevel > 0) {
         applyLODPreview();
       }
       refreshAllControls();
       notifyTreeChanged();
+      window.__EZ_ENVIRONMENT__?.studio.fit();
     }
   );
   presetsSection.add(presetSelect);
@@ -661,6 +699,51 @@ export function setupUI(tree, environment, renderer, scene, camera, orbitControl
   presetsSection.add(randomSeedBtn);
 
   parametersTab.appendChild(presetsSection.element);
+
+  const sizeSection = createSection('Tree size', 'cubeTransparent', true);
+  const heightSlider = createSlider('Height · m', naturalTreeHeight, TREE_HEIGHT_LIMITS.min, heightSliderMaximum(), .1,
+    value => updateTreeHeight(value),
+    () => { if (lastGoodTree.targetHeight !== tree.targetHeight) notifyTreeChanged(); },
+  );
+  heightSlider.element.querySelector('input[type="number"]').setAttribute('aria-label', 'Tree height in meters');
+  heightSlider.element.querySelector('input[type="range"]').setAttribute('aria-label', 'Adjust tree height');
+  sizeSection.add(heightSlider);
+  sizeSection.add(createButton('Reset height', 'undo', () => {
+    if (tree.targetHeight === undefined) return;
+    updateTreeHeight(undefined);
+    notifyTreeChanged();
+  }));
+  parametersTab.appendChild(sizeSection.element);
+
+  function heightSliderMaximum() {
+    return Math.min(TREE_HEIGHT_LIMITS.max, Math.max(20, Math.ceil(naturalTreeHeight * 2), tree.targetHeight ?? 0));
+  }
+
+  function updateTreeHeight(value) {
+    const previous = tree.targetHeight;
+    try {
+      tree.targetHeight = validateTreeHeight(value);
+      applyLODPreview();
+      updateInfoDisplays();
+    } catch (error) {
+      tree.targetHeight = previous;
+      updateInfoDisplays();
+      window.__EZ_ENVIRONMENT__?.studio.status(error.message, true);
+    }
+  }
+
+  const lodSection = createSection('Triangle targets & LODs', 'cubeTransparent', true);
+  const triangleControls = createTriangleControls(targets => {
+    const next = createTreeLODAsset(tree, { triangleTargets: targets }, { forPreview: true });
+    invalidatePreviewLODs();
+    previewLODs = next;
+    tree.triangleTargets = targets;
+    applyLODPreview();
+    updateInfoDisplays();
+    notifyTreeChanged();
+  }, setPreviewLevel, error => window.__EZ_ENVIRONMENT__?.studio.status(error, true));
+  lodSection.add(triangleControls.element);
+  parametersTab.appendChild(lodSection.element);
 
   // ----- Bark Section -----
   const barkSection = createSection('Bark', 'cube', false);
@@ -898,6 +981,13 @@ export function setupUI(tree, environment, renderer, scene, camera, orbitControl
   leavesSection.add(leafAngleSlider);
   controls.push({ control: leafAngleSlider, update: () => leafAngleSlider.setValue(tree.options.leaves.angle) });
 
+  const leafAngleVarianceSlider = createSlider('Angle variation', tree.options.leaves.angleVariance, 0, 60, 1, (val) => {
+    tree.options.leaves.angleVariance = val;
+    onChange();
+  });
+  leavesSection.add(leafAngleVarianceSlider);
+  controls.push({ control: leafAngleVarianceSlider, update: () => leafAngleVarianceSlider.setValue(tree.options.leaves.angleVariance) });
+
   const leafCountSlider = createSlider('Count', tree.options.leaves.count, 0, 100, 1, (val) => {
     tree.options.leaves.count = val;
     onChange();
@@ -1113,6 +1203,14 @@ export function setupUI(tree, environment, renderer, scene, camera, orbitControl
     pulseStat(statsTriangles);
     pulseStat(statsVertices);
     pulseStat(statsBuildTime);
+    const counts = previewLODs?.lods.map(triangleCount) ?? [];
+    counts[previewLevel] = triangles;
+    triangleControls.showCounts(counts, previewLevel);
+    const full = previewLODs?.lods[0].children;
+    const baselineHeight = full ? treeHeight(full[0].geometry, full[1].geometry) : naturalTreeHeight;
+    heightSlider.setMaximum(heightSliderMaximum());
+    heightSlider.setValue(tree.targetHeight ?? baselineHeight);
+    if (exportPreviewButton) exportPreviewButton.hidden = previewLevel === 0;
   }
 
   // ============================================================================
@@ -1146,39 +1244,43 @@ export function setupUI(tree, environment, renderer, scene, camera, orbitControl
   materialNote.textContent = 'Materials and textures are included. ZIP exports also include reusable texture files and a material catalog.';
   exportModelsSection.add(materialNote);
 
-  function treeExportSource(level, worldTransform = false) {
-    const { branches, leaves } = tree.createGeometry(Tree.defaultLODLevels[level].detail ?? {});
-    const group = new THREE.Group();group.name = `Tree_LOD${level}`;
-    const branchMesh = new THREE.Mesh(branches, tree.branchesMesh.material);branchMesh.name = `Branches_LOD${level}`;
-    const leafMesh = new THREE.Mesh(leaves, tree.leavesMesh.material);leafMesh.name = `Leaves_LOD${level}`;
-    group.add(branchMesh, leafMesh);
-    if (tree.trellisMesh) group.add(tree.trellisMesh.clone(true));
-    if (worldTransform) { group.position.copy(tree.position);group.quaternion.copy(tree.quaternion);group.scale.copy(tree.scale); }
-    return { group, dispose() { branches.dispose(); leaves.dispose(); } };
+  function nameTreeLOD(group, level) {
+    group.name = `Tree_LOD${level}`;
+    group.children[0].name = `Branches_LOD${level}`;
+    group.children[1].name = `Leaves_LOD${level}`;
+    return group;
   }
 
-  const exportGlbBtn = createButton('Export GLB (Full Detail)', 'download', async ({ setStatus }) => {
+  async function exportTreeGLB(level, filename, setStatus) {
     setStatus('Exporting GLB…');
     let source;
     try {
-      source = treeExportSource(0, true);
-      downloadBlob(await exportGLB(source.group, { maxTextureSize: exportTextureSize }), 'tree.glb');
+      source = createTreeLODAsset(tree);
+      const group = nameTreeLOD(source.lods[level], level);
+      group.position.copy(tree.position);
+      group.quaternion.copy(tree.quaternion);
+      group.scale.copy(tree.scale);
+      downloadBlob(await exportGLB(group, { maxTextureSize: exportTextureSize }), filename);
     } catch (err) {
       console.error(err);
       window.__EZ_ENVIRONMENT__?.studio.status(err.message, true);
     } finally {
       source?.dispose();
     }
-  });
-  exportModelsSection.add(exportGlbBtn);
+  }
+  exportModelsSection.add(createButton('Export GLB (Full Detail)', 'download', ({ setStatus }) => exportTreeGLB(0, 'tree.glb', setStatus)));
+  const exportPreview = createButton('Export Preview LOD (GLB)', 'download', ({ setStatus }) => exportTreeGLB(previewLevel, `tree_LOD${previewLevel}.glb`, setStatus));
+  exportPreviewButton = exportPreview.element;
+  exportModelsSection.add(exportPreview);
 
   const exportLodsBtn = createButton('Export LODs (ZIP)', 'archive', async ({ setStatus }) => {
-    const snapshot = createExportSnapshot(), sources = [];
+    const snapshot = createExportSnapshot();
+    let source;
     try {
       const files = {};
       // Capture all geometry and appearance before yielding to UI edits.
-      for (let i = 0; i < Tree.defaultLODLevels.length; i++) sources.push(treeExportSource(i));
-      const groups = sources.map(source => snapshot.object(source.group));
+      source = createTreeLODAsset(tree);
+      const groups = source.lods.map((group, level) => snapshot.object(nameTreeLOD(group, level)));
       const maxTextureSize = exportTextureSize;
       for (let i = 0; i < Tree.defaultLODLevels.length; i++) {
         setStatus(`Exporting LOD ${i + 1}/${Tree.defaultLODLevels.length}…`);
@@ -1197,7 +1299,7 @@ export function setupUI(tree, environment, renderer, scene, camera, orbitControl
       console.error(err);
       window.__EZ_ENVIRONMENT__?.studio.status(err.message, true);
     } finally {
-      snapshot.dispose();sources.forEach(source => source.dispose());
+      snapshot.dispose();source?.dispose();
     }
   });
   exportModelsSection.add(exportLodsBtn);
@@ -1280,7 +1382,9 @@ export function setupUI(tree, environment, renderer, scene, camera, orbitControl
         try {
           if(file.size>8*1024*1024)throw new Error('Tree preset exceeds 8 MB.');
           const prepared=prepareTreeProject(JSON.parse(e.target.result),tree);commitTreeProject(tree,prepared);
-          if (previewLevel > 0) {
+          invalidatePreviewLODs();
+          naturalTreeHeight = treeHeight(tree.branchesMesh.geometry, tree.leavesMesh.geometry);
+          if (previewLevel > 0 || tree.triangleTargets || tree.targetHeight !== undefined) {
             applyLODPreview();
           }
           refreshAllControls();
@@ -1301,6 +1405,7 @@ export function setupUI(tree, environment, renderer, scene, camera, orbitControl
   // Refresh all controls to match current tree options
   function refreshAllControls() {
     controls.forEach(({ update }) => update());
+    triangleControls.setTargets(tree.triangleTargets);
     updateInfoDisplays();
   }
 
@@ -1309,7 +1414,12 @@ export function setupUI(tree, environment, renderer, scene, camera, orbitControl
 
   // Mobile expand/collapse functionality
   setupMobileToggle(panel, header);
-  return {refresh(){lastGoodTree=cleanTreeDefinition(tree);previewLevel=0;lodButtons.forEach((b,i)=>b.classList.toggle('active',i===0));refreshAllControls();}};
+  return {refresh(){
+    lastGoodTree=cleanTreeDefinition(tree);invalidatePreviewLODs();previewLevel=0;
+    naturalTreeHeight = treeHeight(tree.branchesMesh.geometry, tree.leavesMesh.geometry);
+    if(tree.triangleTargets || tree.targetHeight !== undefined)applyLODPreview();
+    lodButtons.forEach((b,i)=>b.classList.toggle('active',i===0));refreshAllControls();
+  }};
 }
 
 /**

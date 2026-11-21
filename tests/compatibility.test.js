@@ -7,12 +7,10 @@ import { createRockDefinition, generateRock, rockVariantIndex } from '../src/app
 
 test('Bush Tree presets remain public while only their Plant replacements appear in app navigation', () => {
   const migrated = ['Bush 1', 'Bush 2', 'Bush 3'];
-  assert.equal(Object.keys(TreePreset).length, 16);
   assert.deepEqual(
     Object.keys(TreePreset).filter(name => !APP_TREE_PRESET_NAMES.includes(name)),
     migrated,
   );
-  assert.equal(APP_TREE_PRESET_NAMES.length, 13);
 });
 
 test('legacy version-1 plant definitions load with deterministic leaf and bark defaults', () => {

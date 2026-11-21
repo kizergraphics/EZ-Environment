@@ -2,31 +2,31 @@
   "leaf-surface-v1.png": {
     "source": "Built-in ImageGen, generated for EZ Environment on 2026-09-07",
     "description": "Single broad leaf interior albedo with central midrib, secondary and reticulate veins, pores and chlorophyll variation. No branch atlas or painted lighting.",
-    "processing": "Runtime tint-compatible albedo preserves source contrast. Normal and roughness maps are artistic derivatives of luminance, not measured scan data.",
+    "processing": "Bundled tint-compatible albedo preserves source contrast. Normal and roughness maps are artistic derivatives of luminance, not measured scan data.",
     "scope": "Generated plant surfaces; existing tree maps remain unchanged."
   },
   "leaf-surface-palmate-v1.png": {
     "source": "Built-in ImageGen, generated for EZ Environment on 2026-09-13",
     "description": "Palmate leaf interior with five primary veins radiating from the bottom-center attachment and fine reticulate venation.",
-    "processing": "Runtime tint-compatible albedo; normal and roughness maps are artistic luminance derivatives, not measured scan data.",
+    "processing": "Bundled tint-compatible albedo; normal and roughness maps are artistic luminance derivatives, not measured scan data.",
     "scope": "Lobed, heart-shaped and trifoliate generated plant leaves."
   },
   "leaf-surface-parallel-v1.png": {
     "source": "Built-in ImageGen, generated for EZ Environment on 2026-09-13",
     "description": "Narrow leaf interior with a centered midrib and dense upward-sweeping parallel secondary veins.",
-    "processing": "Runtime tint-compatible albedo; normal and roughness maps are artistic luminance derivatives, not measured scan data.",
+    "processing": "Bundled tint-compatible albedo; normal and roughness maps are artistic luminance derivatives, not measured scan data.",
     "scope": "Lanceolate, fern pinna and succulent generated plant leaves."
   },
   "leaf-surface-needle-v1.png": {
     "source": "Built-in ImageGen, generated for EZ Environment on 2026-09-13",
     "description": "Conifer needle epidermis with continuous longitudinal ridges and subtle stomatal rows.",
-    "processing": "Runtime tint-compatible albedo; normal and roughness maps are artistic luminance derivatives, not measured scan data.",
+    "processing": "Bundled tint-compatible albedo; normal and roughness maps are artistic luminance derivatives, not measured scan data.",
     "scope": "Conifer needles, grass blades and cushion-scale generated foliage."
   },
   "grass/grass-clumps-v1.png": {
     "source": "Built-in ImageGen, generated for EZ Environment on 2026-09-19",
     "description": "Sixteen-cell RGBA atlas of original upright, fan-shaped, basal, bent and seed-bearing meadow-grass cutouts for crossed-card clumps.",
-    "processing": "Runtime preserves source alpha and color; normal and roughness maps are artistic derivatives, not measured scan data. Transparent fringe RGB is ignored by alpha testing.",
+    "processing": "The bundled atlas preserves source alpha and color; normal and roughness maps are artistic derivatives, not measured scan data. Transparent fringe RGB is ignored by alpha testing.",
     "scope": "Superseded prototype retained for comparison; opaque interior masks were unsuitable for crossed-card grass. Runtime uses grass-clumps-v2.png."
   },
   "grass/grass-clumps-v2.png": {
@@ -38,79 +38,94 @@
   "shrubs/woodland-shrub-v1.png": {
     "source": "Built-in ImageGen, generated for EZ Environment on 2026-09-19",
     "description": "Four-cell lobed woodland leaf-interior atlas with branching veins and olive-green mottling.",
-    "processing": "Runtime albedo preserves authored color; normal and roughness maps are artistic luminance derivatives, not measured scan data.",
+    "processing": "Bundled albedo preserves authored color; normal and roughness maps are artistic luminance derivatives, not measured scan data.",
     "scope": "Woodland shrub procedural leaves."
   },
   "shrubs/boxwood-v1.png": {
     "source": "Built-in ImageGen, generated for EZ Environment on 2026-09-19",
     "description": "Four-cell boxwood leaf-interior atlas with restrained midribs, looping veins and fine waxy pores.",
-    "processing": "Runtime albedo preserves authored color; normal and roughness maps are artistic luminance derivatives, not measured scan data.",
+    "processing": "Bundled albedo preserves authored color; normal and roughness maps are artistic luminance derivatives, not measured scan data.",
     "scope": "Dense boxwood procedural leaves."
   },
   "shrubs/meadow-bush-v1.png": {
     "source": "Built-in ImageGen, generated for EZ Environment on 2026-09-19",
     "description": "Four-cell thin meadow-leaf atlas with delicate upward veins and yellow-green variation.",
-    "processing": "Runtime albedo preserves authored color; normal and roughness maps are artistic luminance derivatives, not measured scan data.",
+    "processing": "Bundled albedo preserves authored color; normal and roughness maps are artistic luminance derivatives, not measured scan data.",
     "scope": "Spreading meadow bush procedural leaves."
   },
   "shrubs/copper-bush-v1.png": {
     "source": "Built-in ImageGen, generated for EZ Environment on 2026-09-19",
     "description": "Four-cell copper and bronze heart-leaf atlas with fanning basal veins and natural age variation.",
-    "processing": "Runtime albedo preserves authored color; normal and roughness maps are artistic luminance derivatives, not measured scan data.",
+    "processing": "Bundled albedo preserves authored color; normal and roughness maps are artistic luminance derivatives, not measured scan data.",
     "scope": "Copperleaf bush procedural leaves."
   },
   "shrubs/bush-1-v1.png": {
     "source": "Built-in ImageGen, generated for EZ Environment on 2026-09-19",
     "description": "Four-cell hazel-inspired leaf atlas with pronounced alternating veins, puckering and restrained weathering.",
-    "processing": "Runtime albedo preserves authored color; normal and roughness maps are artistic luminance derivatives, not measured scan data.",
+    "processing": "Bundled albedo preserves authored color; normal and roughness maps are artistic luminance derivatives, not measured scan data.",
     "scope": "Bush 1 procedural leaves."
   },
   "shrubs/bush-2-v1.png": {
     "source": "Built-in ImageGen, generated for EZ Environment on 2026-09-19",
     "description": "Four-cell smooth heart-leaf atlas with quiet basal vein fans and pale new-growth variation.",
-    "processing": "Runtime albedo preserves authored color; normal and roughness maps are artistic luminance derivatives, not measured scan data.",
+    "processing": "Bundled albedo preserves authored color; normal and roughness maps are artistic luminance derivatives, not measured scan data.",
     "scope": "Bush 2 procedural leaves."
   },
   "shrubs/bush-3-v1.png": {
     "source": "Built-in ImageGen, generated for EZ Environment on 2026-09-19",
     "description": "Four-cell juniper-inspired needle epidermis atlas with longitudinal stomatal stripes and blue-green waxy bands.",
-    "processing": "Runtime albedo preserves authored color; normal and roughness maps are artistic luminance derivatives, not measured scan data.",
+    "processing": "Bundled albedo preserves authored color; normal and roughness maps are artistic luminance derivatives, not measured scan data.",
     "scope": "Bush 3 procedural needles."
   },
   "shrubs/berry-thicket-v1.png": {
     "source": "Built-in ImageGen, generated for EZ Environment on 2026-09-19",
     "description": "Four-cell bramble-inspired leaf atlas with strong ribbing, corrugated tissue and limited weathering.",
-    "processing": "Runtime albedo preserves authored color; normal and roughness maps are artistic luminance derivatives, not measured scan data.",
+    "processing": "Bundled albedo preserves authored color; normal and roughness maps are artistic luminance derivatives, not measured scan data.",
     "scope": "Berry Thicket procedural leaves."
   },
   "shrubs/sagebrush-v1.png": {
     "source": "Built-in ImageGen, generated for EZ Environment on 2026-09-19",
     "description": "Four-cell silver-gray sagebrush atlas with dense felt-like fibers and subdued central veins.",
-    "processing": "Runtime albedo preserves authored color; normal and roughness maps are artistic luminance derivatives, not measured scan data.",
+    "processing": "Bundled albedo preserves authored color; normal and roughness maps are artistic luminance derivatives, not measured scan data.",
     "scope": "Sagebrush procedural leaves."
   },
   "shrubs/heather-cushion-v1.png": {
     "source": "Built-in ImageGen, generated for EZ Environment on 2026-09-19",
     "description": "Four-cell heather scale atlas with overlapping scale tissue, central grooves and brown-green age variation.",
-    "processing": "Runtime albedo preserves authored color; normal and roughness maps are artistic luminance derivatives, not measured scan data.",
+    "processing": "Bundled albedo preserves authored color; normal and roughness maps are artistic luminance derivatives, not measured scan data.",
     "scope": "Heather Cushion procedural foliage."
   },
   "shrubs/generic-shrub-v1.png": {
     "source": "Built-in ImageGen, generated for EZ Environment on 2026-09-19",
     "description": "Four-cell rounded-lobed scrub-leaf atlas with fanning veins and yellow-olive mottling.",
-    "processing": "Runtime albedo preserves authored color; normal and roughness maps are artistic luminance derivatives, not measured scan data.",
+    "processing": "Bundled albedo preserves authored color; normal and roughness maps are artistic luminance derivatives, not measured scan data.",
     "scope": "Generic environment shrub procedural leaves."
   },
   "shrubs/generic-bush-v1.png": {
     "source": "Built-in ImageGen, generated for EZ Environment on 2026-09-19",
     "description": "Four-cell narrow toothed scrub-leaf atlas with alternating side veins and meadow-green grain.",
-    "processing": "Runtime albedo preserves authored color; normal and roughness maps are artistic luminance derivatives, not measured scan data.",
+    "processing": "Bundled albedo preserves authored color; normal and roughness maps are artistic luminance derivatives, not measured scan data.",
     "scope": "Generic environment bush procedural leaves."
   },
   "shrubs/dry-shrub-v1.png": {
     "source": "Built-in ImageGen, generated for EZ Environment on 2026-09-19",
     "description": "Four-cell dry scrub-leaf atlas with faded olive, tan-gray desiccation and dusty surface damage.",
-    "processing": "Runtime albedo preserves authored color; normal and roughness maps are artistic luminance derivatives, not measured scan data.",
+    "processing": "Bundled albedo preserves authored color; normal and roughness maps are artistic luminance derivatives, not measured scan data.",
     "scope": "Dry shrub procedural leaves."
+  },
+  "details/stem-color.jpg": {
+    "source": "Built-in ImageGen for EZ Environment, 2026-11-20. Original contact sheet in assets/material-sources/botanical-and-endgrain-v1.png.",
+    "description": "Longitudinal fibers and ridges on green stem skin.",
+    "processing": "512px tint-compatible albedo with artistic normal and roughness companions derived from the source artwork during asset preparation."
+  },
+  "details/petal-color.jpg": {
+    "source": "Built-in ImageGen for EZ Environment, 2026-11-20. Original contact sheet in assets/material-sources/botanical-and-endgrain-v1.png.",
+    "description": "Fine veins and velvety cells on an ivory flower petal.",
+    "processing": "512px tint-compatible albedo with artistic normal and roughness companions derived from the source artwork during asset preparation."
+  },
+  "details/pollen-color.jpg": {
+    "source": "Built-in ImageGen for EZ Environment, 2026-11-20. Original contact sheet in assets/material-sources/botanical-and-endgrain-v1.png.",
+    "description": "Evenly distributed granules from a sunflower disk.",
+    "processing": "512px tint-compatible albedo with artistic normal and roughness companions derived from the source artwork during asset preparation."
   }
 }

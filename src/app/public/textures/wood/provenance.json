@@ -5,7 +5,8 @@
     "processing": "Tint-compatible color with derived artistic normal and roughness maps. Not measured scan data."
   },
   "endgrain": {
-    "source": "Original analytic code in wood-surface.js, project MIT license",
-    "description": "Irregular growth rings, radial checks and pores mapped onto circular cut ends."
+    "source": "Built-in ImageGen for EZ Environment, 2026-11-20. Original contact sheet in assets/material-sources/botanical-and-endgrain-v1.png.",
+    "description": "Transverse hardwood cut with growth rings, pores and radial checks.",
+    "processing": "512px tint-compatible albedo with artistic normal and roughness companions derived from the source artwork during asset preparation."
   }
 }

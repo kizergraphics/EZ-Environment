@@ -204,13 +204,14 @@ export class Tree extends THREE.Group {
    * custom LOD systems. Reuses the current skeleton, generating one first
    * if none exists.
    * @param {LODDetail} detail
+   * @param {{leafAnchors?: boolean}} [options] Include leaf attachment heights for editing.
    * @returns {{ branches: THREE.BufferGeometry, leaves: THREE.BufferGeometry }}
    */
-  createGeometry(detail = {}) {
+  createGeometry(detail = {}, { leafAnchors = false } = {}) {
     if (!this.skeleton) {
       this.#generateSkeleton();
     }
-    const buffers = this.#meshSkeleton(detail);
+    const buffers = this.#meshSkeleton(detail, leafAnchors);
     return {
       branches: this.#buildBufferGeometry(buffers.branches),
       leaves: this.#buildBufferGeometry(buffers.leaves),
@@ -276,7 +277,7 @@ export class Tree extends THREE.Group {
    * Consumes no RNG, so it can run repeatedly with different detail specs.
    * @param {LODDetail} detail
    */
-  #meshSkeleton(detail = {}) {
+  #meshSkeleton(detail = {}, leafAnchors = false) {
     const sectionStride = Math.max(1, Math.floor(detail.sectionStride ?? 1));
     const segmentFactor = detail.segmentFactor ?? 1;
     const leafStride = Math.max(1, Math.floor(detail.leafStride ?? 1));
@@ -296,6 +297,7 @@ export class Tree extends THREE.Group {
       normals: [],
       indices: [],
       uvs: [],
+      anchors: leafAnchors ? [] : undefined,
     };
 
     for (const skeletonBranch of this.skeleton.branches) {
@@ -605,9 +607,11 @@ export class Tree extends THREE.Group {
       // See generateChildBranches for rationale.
       const radialJitter = this.rng.random(0.5, -0.5);
       const radialAngle = 2.0 * Math.PI * (radialOffset + (angleSlots[i] + radialJitter) / count);
+      const variance = this.options.leaves.angleVariance;
+      const leafAngle = this.options.leaves.angle + (variance > 0 ? this.rng.random(variance, -variance) : 0);
       const q1 = new THREE.Quaternion().setFromAxisAngle(
         new THREE.Vector3(1, 0, 0),
-        this.options.leaves.angle / (180 / Math.PI),
+        leafAngle / (180 / Math.PI),
       );
       const q2 = new THREE.Quaternion().setFromAxisAngle(
         new THREE.Vector3(0, 1, 0),
@@ -717,6 +721,7 @@ export class Tree extends THREE.Group {
         n4.z,
       );
       buffers.uvs.push(0, 1, 0, 0, 1, 0, 1, 1);
+      buffers.anchors?.push(origin.y, origin.y, origin.y, origin.y);
       buffers.indices.push(i, i + 1, i + 2, i, i + 2, i + 3);
       i += 4;
     };
@@ -855,9 +860,10 @@ export class Tree extends THREE.Group {
       'uv',
       new THREE.BufferAttribute(new Float32Array(buffers.uvs), 2),
     );
-    g.setIndex(
-      new THREE.BufferAttribute(new Uint16Array(buffers.indices), 1),
-    );
+    if (buffers.anchors) {
+      g.setAttribute('leafAnchorY', new THREE.Float32BufferAttribute(buffers.anchors, 1));
+    }
+    g.setIndex(buffers.indices);
     g.computeBoundingSphere();
     return g;
   }

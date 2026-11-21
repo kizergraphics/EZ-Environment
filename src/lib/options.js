@@ -141,6 +141,7 @@ export default class TreeOptions {
 
       // Angle of leaves relative to parent branch (degrees)
       angle: 10,
+      angleVariance: 0,
 
       // Number of leaves
       count: 1,

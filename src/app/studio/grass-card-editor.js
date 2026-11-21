@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { TransformControls } from 'three/addons/controls/TransformControls.js';
-import { applyGrassCardEdits, defaultGrassCardEdit, grassCardCount, grassCardEdits, GRASS_CARD_TEXTURES, validateGrassCardEdits } from '../generators/grass-cards.js';
+import { applyGrassCardEdits, defaultGrassCardEdit, grassCardCount, grassCardEdits, validateGrassCardEdits } from '../generators/grass-cards.js';
+import { grassAtlasId, grassPlaneTextureOptions } from '../generators/grass-atlases.js';
 
 export const GRASS_LAYOUT_STORAGE='ez-grass-plane-layouts-v1';
 const degrees=r=>THREE.MathUtils.radToDeg(r);
@@ -50,17 +51,21 @@ export class GrassCardEditor {
   setActive(active){
     this.active=active;
     if(active){
-      this.setup();this.studio.lod=0;this.studio.viewportGroup.clear();
-      if(this.studio.asset)this.studio.viewportGroup.add(this.studio.asset.lods[0]);
-      this.studio.updateAssetStats();
+      this.setup();this.studio.lod=0;
     }
+    this.studio.showAssetDetail();
+    this.studio.updateAssetStats();
     this.sync();this.refreshPanel();
   }
   refreshPanel(){
     const scroll=this.studio.panel.querySelector('.studio-scroll')?.scrollTop||0;
     this.studio.renderPanel();const panel=this.studio.panel.querySelector('.studio-scroll');if(panel)panel.scrollTop=scroll;
   }
-  mesh(){return this.studio.assetMode==='plant'?this.studio.asset?.lods[0]?.children.find(mesh=>mesh.geometry?.userData.cardIndices):null;}
+  mesh(){
+    if(this.studio.assetMode!=='plant')return null;
+    const asset=this.studio.asset;
+    return (asset?.editorObject??asset?.lods[0])?.children.find(mesh=>mesh.geometry?.userData.cardIndices);
+  }
   cardOrigin(){
     const mesh=this.mesh(),slot=mesh?.geometry.userData.cardIndices.indexOf(this.selected);
     if(slot===undefined||slot<0)return null;
@@ -69,8 +74,9 @@ export class GrassCardEditor {
   }
   preview(){
     const d=this.definition;
-    if(this.studio.asset?.definition.cardLayout!==d.cardLayout)return;
-    for(const lod of this.studio.asset.lods)lod.traverse(mesh=>{
+    const active=this.studio.asset?.definition;
+    if(active?.cardLayout!==d.cardLayout||grassAtlasId(active)!==grassAtlasId(d))return;
+    for(const lod of [...this.studio.asset.lods,this.studio.asset.editorObject])lod?.traverse(mesh=>{
       if(mesh.geometry?.userData.cardIndices)applyGrassCardEdits(mesh.geometry,d);
     });
   }
@@ -92,7 +98,7 @@ export class GrassCardEditor {
     this.studio.change('grassCardEdits',validateGrassCardEdits({...d.grassCardEdits,[d.cardLayout]:Array.from({length:grassCardCount(d.cardLayout)},defaultGrassCardEdit)}));
     this.preview();this.sync();
   }
-  render(body,{el,action,select,field,section,title}){
+  render(body,{el,action,select,field,section}){
     this.inputs.clear();this.stateLabel=null;this.pngPreview=null;
     if(!this.available){this.sync();return;}
     const d=this.definition;this.selected=Math.min(this.selected,grassCardCount(d.cardLayout)-1);
@@ -125,7 +131,7 @@ export class GrassCardEditor {
       const rotation=[...grassCardEdits(this.definition)[this.selected].rotation];rotation[index]=value;this.change({rotation});
     });
     for(const key of ['width','height'])add(key,`Plane ${key} ×`,edit[key],.1,3,.05,value=>this.change({[key]:value}));
-    const texture=select('Plane PNG',[['','Original PNG'],...GRASS_CARD_TEXTURES.map(key=>[key,title(key)])],edit.texture,value=>this.change({texture:value}));group.body.append(texture);this.inputs.set('texture',texture.querySelector('select'));
+    const texture=select('Plane PNG',[['','Layout default'],...grassPlaneTextureOptions(d)],edit.texture,value=>this.change({texture:value}));group.body.append(texture);this.inputs.set('texture',texture.querySelector('select'));
     add('flipX','Flip PNG horizontally',edit.flipX,0,1,1,value=>this.change({flipX:value}),'checkbox');
     const reset=el('div','studio-button-row');reset.append(action('Reset plane',()=>this.change(defaultGrassCardEdit())),action('Reset layout',()=>this.resetLayout()));group.body.append(reset);
     group.body.append(action('Close editor',()=>this.setActive(false)));

@@ -1,8 +1,8 @@
 import * as THREE from 'three';
-import atlas from './grass-atlas-v2.json' with { type: 'json' };
+import { GRASS_CARD_TEXTURES, GRASS_TWELVE_LAYOUT, GRASS_TYPES, GRASS_VARIANTS, grassAtlas, grassAtlasId, grassAtlasRegion } from './grass-atlases.js';
 
-export const GRASS_CARD_LAYOUTS = Object.freeze(['sparseCross','staggeredStar','naturalOffset','denseTuft']);
-export const GRASS_CARD_ATLASES = Object.freeze(['meadow-v1']);
+export const GRASS_CARD_LAYOUTS = Object.freeze(['sparseCross','staggeredStar','naturalOffset','denseTuft',GRASS_TWELVE_LAYOUT]);
+export const GRASS_CARD_ATLASES = Object.freeze(Object.keys(GRASS_TYPES));
 
 const LAYOUTS = Object.freeze({
   sparseCross: {
@@ -21,9 +21,17 @@ const LAYOUTS = Object.freeze({
     angles:[0,30,60,90,120,150], heights:[1,.9,.79,.71,.6,.53], widths:[.9,1,.93,.83,.8,.76],
     offsets:[[0,0],[.04,-.02],[-.06,.03],[.04,.06],[-.07,-.06],[.05,-.04]], leans:[0,.03,-.03,.065,-.055,.05], cells:['tall','medium','wisps','leftFan','rightFan','basal'], lods:[[0,1,2,3,4,5],[0,1,3,4],[0,1]],
   },
+  [GRASS_TWELVE_LAYOUT]: {
+    angles:[4,20,36,50,67,83,98,113,127,145,158,174],
+    heights:[1,.78,.89,.59,.84,.71,.66,.87,.53,.73,.61,.58],
+    widths:[.84,.77,.88,.72,.81,.75,.76,.86,.68,.79,.67,.73],
+    offsets:[[-.06,.04],[.15,.08],[-.09,-.14],[-.24,.05],[.04,.17],[.21,-.12],[-.16,.18],[.08,-.16],[.26,.10],[-.10,-.22],[.09,.22],[-.21,-.14]],
+    leans:[0,.10,-.06,-.13,.04,.12,-.10,.06,.15,-.09,.14,-.06],
+    lods:[[0,1,2,3,4,5,6,7,8,9,10,11],[0,2,4,5,7,9],[0,4,7]],
+  },
 });
 
-export const GRASS_CARD_TEXTURES = Object.freeze(Object.keys(atlas.regions));
+export { GRASS_CARD_TEXTURES };
 export const grassCardCount = layout => LAYOUTS[layout]?.angles.length ?? 0;
 export const defaultGrassCardEdit = () => ({position:[0,0,0],rotation:[0,0,0],width:1,height:1,texture:'',flipX:false});
 
@@ -57,18 +65,40 @@ export function grassCardEdits(definition) {
   return definition.grassCardEdits?.[definition.cardLayout] ?? Array.from({length:grassCardCount(definition.cardLayout)},defaultGrassCardEdit);
 }
 
+function speciesPlaneRegions(atlas, definition, edits) {
+  const choices = edits.map(({texture}, index) =>
+    texture ? grassAtlasRegion(atlas, texture) : definition.seedHeads && index === 0 ? atlas.regions.seeds : null,
+  );
+  const claimed = new Set(choices.filter(Boolean));
+  return choices.map((choice, index) => {
+    if (choice) return choice;
+    // Reserve explicitly selected images first. The other planes use distinct
+    // images even when a manual selection takes one of their default variants.
+    const start = (definition.seed + index) % GRASS_VARIANTS.length;
+    for (let offset = 0; offset < GRASS_VARIANTS.length; offset++) {
+      const region = atlas.regions[GRASS_VARIANTS[(start + offset) % GRASS_VARIANTS.length]];
+      if (!claimed.has(region)) {
+        claimed.add(region);
+        return region;
+      }
+    }
+  });
+}
+
 // Work from the unedited, normalized vertices every time. Moving one plane must
 // never recenter or resize the other planes, or accumulate transform error.
 export function applyGrassCardEdits(geometry, definition) {
   const {cardIndices,basePositions,baseUvs}=geometry.userData;
+  const atlasId=geometry.userData.grassCardAtlasId??grassAtlasId(definition),atlas=grassAtlas(atlasId);
   const edits=grassCardEdits(definition),position=geometry.attributes.position,uv=geometry.attributes.uv;
+  const speciesRegions=atlasId==='meadow-v1'?null:speciesPlaneRegions(atlas,definition,edits);
   const origin=new THREE.Vector3(),point=new THREE.Vector3(),offset=new THREE.Vector3(),rotation=new THREE.Euler();
   for(const [slot,index] of cardIndices.entries()){
     const edit=edits[index],start=slot*12;
     origin.fromArray(basePositions,start).add(new THREE.Vector3().fromArray(basePositions,start+3)).multiplyScalar(.5);
     offset.set(edit.position[0]*definition.width,edit.position[1]*definition.height,edit.position[2]*definition.width);
     rotation.set(...edit.rotation.map(THREE.MathUtils.degToRad));
-    const tex=edit.texture?atlas.regions[edit.texture].uv:null;
+    const tex=speciesRegions?.[index]?.uv??(edit.texture?grassAtlasRegion(atlas,edit.texture)?.uv:null);
     const u0=tex?.[0]??baseUvs[slot*8],v0=tex?.[1]??baseUvs[slot*8+1],u1=tex?.[2]??baseUvs[slot*8+2],v1=tex?.[3]??baseUvs[slot*8+5];
     const left=edit.flipX?u1:u0,right=edit.flipX?u0:u1;
     for(let corner=0;corner<4;corner++){
@@ -86,11 +116,12 @@ function rng(seed) {
   return()=>{state+=0x6d2b79f5;let n=Math.imul(state^state>>>15,state|1);n^=n+Math.imul(n^n>>>7,n|61);return((n^n>>>14)>>>0)/4294967296;};
 }
 
-function cardGeometry(definition, layout, level) {
+function cardGeometry(definition, layout, level, atlasId, quality) {
+  const atlas=grassAtlas(atlasId);
   const random=rng(definition.seed),indices=[],position=[],uv=[],wind=[],color=[];
   const variations=layout.angles.map(()=>[random()*2-1,random()*2-1,random()*2-1]);
   const previewLods=[layout.lods[0].slice(0,Math.max(3,layout.lods[0].length-1)),layout.lods[1].slice(0,2),layout.lods[2].slice(0,1)];
-  const selected=definition.__grassQuality==='preview'?previewLods[level]:layout.lods[level];
+  const selected=quality==='preview'?previewLods[level]:layout.lods[level];
   for(const cardIndex of selected) {
     const yaw=(layout.angles[cardIndex]+variations[cardIndex][0]*10*definition.cardVariation)*Math.PI/180;
     const width=definition.width*layout.widths[cardIndex]*(1+variations[cardIndex][1]*.15*definition.cardVariation);
@@ -104,7 +135,11 @@ function cardGeometry(definition, layout, level) {
       rootX+ux*half+nx*lean,height,rootZ+uz*half+nz*lean,
       rootX-ux*half+nx*lean,height,rootZ-uz*half+nz*lean,
     );
-    const cell=definition.seedHeads&&cardIndex===selected[0]?'seeds':layout.cells[cardIndex];
+    const cell=definition.seedHeads&&cardIndex===selected[0]
+      ? 'seeds'
+      : atlasId==='meadow-v1'
+        ? layout.cells[cardIndex]
+        : GRASS_VARIANTS[(definition.seed+cardIndex)%GRASS_VARIANTS.length];
     const [u0,v0,u1,v1]=atlas.regions[cell].uv;
     uv.push(u0,v0,u1,v0,u1,v1,u0,v1);wind.push(0,0,1,1);color.push(1,1,1,1,1,1,1,1,1,1,1,1);indices.push(base,base+1,base+2,base,base+2,base+3);
   }
@@ -114,7 +149,7 @@ function cardGeometry(definition, layout, level) {
   geometry.setAttribute('windWeight',new THREE.Float32BufferAttribute(wind,1));
   geometry.setAttribute('color',new THREE.Float32BufferAttribute(color,3));
   geometry.setIndex(indices);geometry.computeVertexNormals();geometry.computeBoundingBox();geometry.computeBoundingSphere();
-  geometry.userData={grassCardLayout:definition.cardLayout,grassAtlas:definition.grassAtlas,grassAtlasRevision:atlas.revision,cards:selected.length,cardIndices:[...selected]};
+  geometry.userData={grassCardLayout:definition.cardLayout,grassAtlas:definition.grassAtlas,grassCardAtlasId:atlasId,grassAtlasRevision:atlas.revision,cards:selected.length,cardIndices:[...selected]};
   return geometry;
 }
 
@@ -122,11 +157,11 @@ export function generateGrassCards(definition,{quality='export'}={}) {
   if(!GRASS_CARD_LAYOUTS.includes(definition.cardLayout))throw new TypeError(`Unknown grass card layout: ${definition.cardLayout}`);
   if(!GRASS_CARD_ATLASES.includes(definition.grassAtlas))throw new TypeError(`Unknown grass atlas: ${definition.grassAtlas}`);
   const layout=LAYOUTS[definition.cardLayout];
-  const material=new THREE.MeshStandardMaterial({name:'Grass cards',color:definition.leafColor,roughness:1,metalness:0,side:THREE.DoubleSide,alphaTest:.45,alphaToCoverage:true});
-  material.userData={pbrFamily:'grassCards',pbrVariant:definition.grassAtlas,grassAtlasRevision:atlas.revision,pbrBaselineTint:'#698446',vegetation:true,wind:true,windStrength:.25,windAttribute:'windWeight'};
-  const buildDefinition={...definition,__grassQuality:quality};
-  const geometries=[0,1,2].map(level=>cardGeometry(buildDefinition,layout,level));
-  const reference=quality==='preview'?cardGeometry({...definition,__grassQuality:'export'},layout,0):geometries[0];
+  const atlasId=grassAtlasId(definition),atlas=grassAtlas(atlasId);
+  const material=new THREE.MeshStandardMaterial({name:atlasId==='meadow-v1'?'Grass cards':`${GRASS_TYPES[definition.grassAtlas]} cards`,color:definition.leafColor,roughness:1,metalness:0,side:THREE.DoubleSide,alphaTest:.45,alphaToCoverage:true});
+  material.userData={pbrFamily:'grassCards',pbrVariant:atlasId,grassAtlasRevision:atlas.revision,pbrBaselineTint:'#698446',vegetation:true,wind:true,windStrength:.25,windAttribute:'windWeight'};
+  const geometries=[0,1,2].map(level=>cardGeometry(definition,layout,level,atlasId,quality));
+  const reference=quality==='preview'?cardGeometry(definition,layout,0,atlasId,'export'):geometries[0];
   normalizeGeometries(geometries,definition.width,definition.height,reference);
   if(reference!==geometries[0])reference.dispose();
   for(const geometry of geometries){

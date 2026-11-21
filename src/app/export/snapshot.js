@@ -20,7 +20,7 @@ export function createExportSnapshot() {
     // Texture.clone shares Source; separate that wrapper so replacing a live
     // map's image cannot change this export. Bundled HTML images are immutable.
     const image = source.image;
-    texture.source = new THREE.Source(
+    texture.source = new THREE.TextureSource(
       image?.data && ArrayBuffer.isView(image.data)
         ? { ...image, data: image.data.slice() }
         : image,

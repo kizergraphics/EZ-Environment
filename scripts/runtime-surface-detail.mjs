@@ -6,21 +6,62 @@ import path from 'node:path';
 const output=path.resolve('artifacts/surface-detail'); await mkdir(output,{recursive:true});
 const browser=await chromium.launch({channel:'msedge',headless:true});
 const page=await browser.newPage({viewport:{width:1440,height:960}});
-page.setDefaultTimeout(120000); const errors=[];page.on('pageerror',e=>errors.push(e.message));
+page.setDefaultTimeout(120000);
+const errors = [], failedTextures = [];
+page.on('pageerror', error => errors.push(error.message));
+page.on('console', message => {
+  if (['warning', 'error'].includes(message.type())) errors.push(message.text());
+});
+page.on('requestfailed', request => {
+  if (request.url().includes('/textures/')) failedTextures.push(request.url());
+});
+page.on('response', response => {
+  if (response.status() >= 400 && response.url().includes('/textures/')) failedTextures.push(response.url());
+});
 try {
-  await page.goto('http://127.0.0.1:5194');await page.waitForFunction(()=>window.__EZ_ENVIRONMENT__?.ready);
+  await page.goto(process.env.EZ_TEST_URL || 'http://127.0.0.1:5194');await page.waitForFunction(()=>window.__EZ_ENVIRONMENT__?.ready);
+  const bundledTextureCount = await page.evaluate(async () => {
+    const { loadPbrFamily } = await import('/materials/pbr.js');
+    const { LEAF_TEXTURES } = await import('/generators/leaf-textures.js');
+    const { GRASS_TYPES } = await import('/generators/grass-atlases.js');
+    const { applyTreeTextures, BarkType, LeafType } = await import('/textures.js');
+    const { textureReadiness } = await import('/materials/readiness.js');
+    const families = await Promise.all([
+      ...LEAF_TEXTURES.map(variant => loadPbrFamily('foliage', { variant })),
+      ...[...Object.keys(GRASS_TYPES), 'meadow-extended'].map(variant => loadPbrFamily('grassCards', { variant })),
+      ...['stem', 'petal', 'pollen', 'wood', 'endgrain', 'stone', 'sandstone'].map(id => loadPbrFamily(id)),
+      loadPbrFamily('foliage', { variant: 'fern-frond' }),
+    ]);
+    const leaves = Object.values(LeafType);
+    for (const [index, type] of Object.values(BarkType).entries()) {
+      const options = { bark: { type, maps: {} }, leaves: { type: leaves[index % leaves.length] }, trellis: {} };
+      applyTreeTextures({ options });
+      const { map, normalMap, roughnessMap } = options.leaves;
+      families.push(options.bark.maps, { map, normalMap, roughnessMap });
+    }
+    const textures = [...new Set(families.flatMap(Object.values))];
+    await Promise.all(textures.map(textureReadiness));
+    for (const texture of textures) {
+      const image = texture.image;
+      if (!(image instanceof HTMLImageElement && image.naturalWidth > 0 && new URL(image.src).pathname.startsWith('/textures/'))) {
+        throw new Error('Missing or non-file-backed texture ' + texture.name);
+      }
+    }
+    return textures.length;
+  });
   const coverage=await page.evaluate(async()=>{
     const {ASSET_PRESETS}=await import('/generators/catalog.js');
     const plants=await import('/generators/plants.js'),rocks=await import('/generators/rocks.js');
-    const {prepareAssetMaterials,assertPbrReady,getBotanicalMaps}=await import('/materials/pbr.js');
-    const treeMap=getBotanicalMaps('foliage').map,treeImage=treeMap.image;
+    const {prepareAssetMaterials,assertPbrReady}=await import('/materials/pbr.js');
+    const {getLeafMap}=await import('/textures.js');
+    const treeMap=getLeafMap('ash'),treeImage=treeMap.image;
     const result=[];
     for(const preset of ASSET_PRESETS){
       const asset=rocks.ROCK_ARCHETYPES.includes(preset.definition.archetype)?rocks.generateRock(preset.definition):plants.generatePlant(preset.definition);
       try { await prepareAssetMaterials(asset);asset.lods.forEach(lod=>assertPbrReady(lod,{requireAll:true}));result.push(preset.id); }
       finally {asset.dispose();}
     }
-    if(getBotanicalMaps('foliage').map!==treeMap||treeMap.image!==treeImage)throw new Error('Tree map was modified.');
+    if(getLeafMap('ash')!==treeMap||treeMap.image!==treeImage)throw new Error('Tree map was modified.');
     return result;
   });
   const surfaces=[];
@@ -47,6 +88,7 @@ try {
     assert.ok(detail.every(m=>m.width>=512&&m.contrast>5),`${type}: insufficient visible albedo variation ${JSON.stringify(detail)}`);
     await page.screenshot({path:path.join(output,`${type}.png`)});surfaces.push({type,materials:detail});
   }
-  assert.deepEqual(errors,[]);await writeFile(path.join(output,'report.json'),JSON.stringify({passed:true,coverage,surfaces,errors},null,2));
-  console.log(JSON.stringify({passed:true,presets:coverage.length,surfaces:surfaces.length}));
+  assert.deepEqual(failedTextures, []);
+  assert.deepEqual(errors,[]);await writeFile(path.join(output,'report.json'),JSON.stringify({passed:true,bundledTextureCount,coverage,surfaces,errors,failedTextures},null,2));
+  console.log(JSON.stringify({passed:true,bundledTextureCount,presets:coverage.length,surfaces:surfaces.length}));
 }finally{await browser.close();}

@@ -26,21 +26,26 @@ export class GenerationClient {
         worker.onmessage = async ({ data }) => {
           if (!current() || data?.id !== id) return;
           const lods = [];
+          let editorObject;
           try {
             if (data.error) throw new Error(data.error);
             if (!Array.isArray(data.lods) || data.lods.length !== 3) throw new Error('Asset generation returned invalid LODs.');
             const loader = new ObjectLoader();
             for (const json of data.lods) lods.push(loader.parse(json));
+            if (data.editorObject) editorObject = loader.parse(data.editorObject);
             let disposed = false;
-            const asset = { ...data, lods, object3D: lods[0], dispose() {
+            const asset = { ...data, lods, editorObject, object3D: lods[0], dispose() {
               if (disposed) return;
               disposed = true; lods.forEach(l => disposeObject(l));
+              if (editorObject) disposeObject(editorObject);
             } };
             await this.prepareMaterials(asset, { signal: materialController.signal });
+            if (editorObject) await this.prepareMaterials({ object3D: editorObject }, { signal: materialController.signal });
             if (!current()) { asset.dispose(); return; }
             finish(); resolve(asset);
           } catch (error) {
             lods.forEach(l => disposeObject(l));
+            if (editorObject) disposeObject(editorObject);
             if (current()) { finish(); reject(error); }
           }
         };

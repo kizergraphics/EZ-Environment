@@ -8,8 +8,7 @@ import assert from 'node:assert/strict';
 
 const root=path.resolve(import.meta.dirname,'..');
 const output=path.join(root,'artifacts','biomes',new Date().toISOString().replaceAll(':','-'));
-const thumbs=path.join(root,'src','app','public','images','biomes');
-await mkdir(output,{recursive:true});await mkdir(thumbs,{recursive:true});
+await mkdir(output,{recursive:true});
 const url=process.env.EZ_TEST_URL||'http://127.0.0.1:5181';
 const benchmark=process.env.EZ_BIOME_BENCH!=='0';
 const report={startedAt:new Date().toISOString(),url,output,benchmark,protocol:{resolution:[1920,1080],dpr:1,quality:'medium',warmupMs:5000,measurementMs:10000,metric:'requestAnimationFrame full-scene frame intervals during a fixed camera replay; includes CPU and display scheduling, not GPU-only time',targets:{naturalistic:16.7,photorealistic:33.3}},checks:[],cases:[],screenshots:[],errors:[],consoleErrors:[],externalRequests:[]};
@@ -38,6 +37,11 @@ try{
   await page.evaluate(()=>window.__EZ_ENVIRONMENT__.studio.setMode('environment'));await frame();
   report.hardware=await page.evaluate(()=>{const gl=window.__EZ_ENVIRONMENT__.renderer.getContext(),ext=gl.getExtension('WEBGL_debug_renderer_info');return{userAgent:navigator.userAgent,renderer:ext?gl.getParameter(ext.UNMASKED_RENDERER_WEBGL):gl.getParameter(gl.RENDERER),vendor:ext?gl.getParameter(ext.UNMASKED_VENDOR_WEBGL):gl.getParameter(gl.VENDOR)};});
   await record('Initialized environment workspace',await page.evaluate(()=>({mode:window.__EZ_ENVIRONMENT__.mode,biome:window.__EZ_ENVIRONMENT__.environment.options.biome})));
+
+  assert.equal(await page.locator('.biome-card').count(), 0);
+  assert.equal(await page.locator('#studio-panel').getByText('Meadow', { exact: true }).count(), 1);
+  assert.equal(await page.getByRole('button', { name: 'Reset preset', exact: true }).count(), 1);
+  await record('Environment exposes one Meadow preset with a reset action');
 
   const beforeWidth=await page.evaluate(()=>window.__EZ_ENVIRONMENT__.renderer.domElement.width);
   await page.locator('#inspector-resize').focus();await page.keyboard.press('ArrowLeft');
@@ -73,27 +77,27 @@ try{
     const s=window.__EZ_ENVIRONMENT__.studio;s.cameraPreset('ground');const environment=s.cameraState();
     await s.setMode('plant');s.cameraPreset('top');const plant=s.cameraState();
     await s.setMode('rock');s.cameraPreset('ground');const rock=s.cameraState();
-    await s.setMode('plant');const plantAfter=s.cameraState();await s.setMode('rock');const rockAfter=s.cameraState();await s.setMode('environment');const environmentAfter=s.cameraState();
-    return{environment,plant,rock,environmentAfter,plantAfter,rockAfter};
+    await s.setMode('plant');const plantAfter=s.cameraState();await s.setMode('rock');const rockAfter=s.cameraState(), environmentAfter=s.cameras.modes.environment;await s.setMode('environment');const preview=s.cameraState();
+    return{environment,plant,rock,environmentAfter,plantAfter,rockAfter,preview};
   });
   for(const mode of ['environment','plant','rock']){
-    for(const key of ['near','far','zoom'])assert.equal(cameraModes[mode][key],cameraModes[`${mode}After`][key]);
+    for(const key of ['near','far','zoom'])assert.equal(cameraModes[mode][key],cameraModes[`${mode}After`][key],`${mode} ${key}`);
     for(const key of ['position','target'])cameraModes[mode][key].forEach((value,i)=>assert.ok(Math.abs(value-cameraModes[`${mode}After`][key][i])<1e-9,`${mode} ${key}`));
   }
-  await record('Plant, Rock and Environment keep independent camera states across revisits');
+  for(const key of ['position','target'])cameraModes.rock[key].forEach((value,i)=>assert.ok(Math.abs(value-cameraModes.preview[key][i])<1e-9));
+  await record('Editor cameras are stored independently and Environment previews the latest asset framing');
 
   // Abort a real first-use texture request, then retry after removing the route.
-  const failedTexture='**/textures/biomes/dune-sand/color-2048.jpg';
+  const failedTexture='**/textures/biomes/meadow-soil/color-2048.jpg';
   await page.route(failedTexture,route=>route.abort('failed'));
   const rollback=await page.evaluate(async()=>{
     const a=window.__EZ_ENVIRONMENT__,e=a.environment;
-    const {applyBiome}=await import('/environment/biomes.js');
     const before={options:JSON.stringify(e.options),hash:e.placement.hash,ground:e.ground.uuid,content:e.content.children.map(o=>o.uuid)};
-    let error=null;try{await e.setOptions({...applyBiome(e.options,'desert'),appearance:'photorealistic'});}catch(failure){error=failure.message;}
+    let error=null;try{await e.setOptions({appearance:'photorealistic'});}catch(failure){error=failure.message;}
     return {before,after:{options:JSON.stringify(e.options),hash:e.placement.hash,ground:e.ground.uuid,content:e.content.children.map(o=>o.uuid)},error};
   });
   await page.unroute(failedTexture);
-  assert.match(rollback.error||'',/dune-sand/);assert.deepEqual(rollback.after,rollback.before);
+  assert.match(rollback.error||'',/meadow-soil/);assert.deepEqual(rollback.after,rollback.before);
   await record('Failed material load retains the previous options and usable scene');
 
   // Capture the real app renderer: no illustrated or generated thumbnail substitutes.
@@ -117,20 +121,16 @@ try{
     if(size!=='viewport')assert.deepEqual(data.dimensions,size==='4k'?[3840,2160]:[1920,1080]);
     await writeFile(file,Buffer.from(data.base64,'base64'));return{file,dimensions:data.dimensions};
   };
-  for(const biome of ['forest','desert','meadow','rocky']){
+  for(const biome of ['meadow']){
     let referenceHash=null,referenceTrees=null;
     for(const appearance of ['naturalistic','photorealistic']){
       console.log(`CASE ${biome} ${appearance}`);
-      await page.evaluate(async({biome,appearance})=>{const s=window.__EZ_ENVIRONMENT__.studio;await s.applyBiomePreset(biome);await s.envChange({appearance,quality:'medium'},{modified:false});s.cameraPreset('overview');},{biome,appearance});
+      await page.evaluate(async({biome,appearance})=>{const s=window.__EZ_ENVIRONMENT__.studio;await s.resetMeadowPreset();await s.envChange({appearance,quality:'medium'},{modified:false});s.cameraPreset('overview');},{biome,appearance});
       await ready();await frame();
       const result=await page.evaluate(()=>{const a=window.__EZ_ENVIRONMENT__,e=a.environment;return{biome:e.options.biome,appearance:e.options.appearance,hash:e.placement.hash,count:e.placement.count,trees:e.grove.records?.length??null,groveTransforms:e.grove.records??null,heroVisible:a.tree.visible,legacyForestVisible:a.forest.visible,resources:{...a.renderer.info.memory}};});
       assert.equal(result.biome,biome);assert.equal(result.appearance,appearance);assert.equal(result.heroVisible,false);assert.equal(result.legacyForestVisible,false);
       if(referenceHash===null){referenceHash=result.hash;referenceTrees=result.groveTransforms;}else{assert.equal(result.hash,referenceHash);assert.deepEqual(result.groveTransforms,referenceTrees);}
       const overview=await capture('1080p',path.join(output,`${biome}-${appearance}-overview.png`));report.screenshots.push(overview);
-      if(appearance==='naturalistic'){
-        const jpg=await page.evaluate(()=>{const a=window.__EZ_ENVIRONMENT__;a.render();const source=a.renderer.domElement,canvas=document.createElement('canvas');canvas.width=480;canvas.height=270;const cropHeight=Math.min(source.height,source.width*9/16),cropWidth=cropHeight*16/9;canvas.getContext('2d').drawImage(source,(source.width-cropWidth)/2,(source.height-cropHeight)/2,cropWidth,cropHeight,0,0,480,270);return canvas.toDataURL('image/jpeg',.88).split(',')[1];});
-        await writeFile(path.join(thumbs,`${biome}.jpg`),Buffer.from(jpg,'base64'));
-      }
       await page.evaluate(()=>window.__EZ_ENVIRONMENT__.studio.cameraPreset('ground'));await frame();
       report.screenshots.push(await capture('1080p',path.join(output,`${biome}-${appearance}-ground.png`)));
       if(benchmark){
@@ -147,18 +147,18 @@ try{
   }
 
   const workspaceFile=path.join(output,'workspace.png');await page.screenshot({path:workspaceFile});report.screenshots.push({file:workspaceFile});
-  report.screenshots.push(await capture('4k',path.join(output,'rocky-photorealistic-4k.png')));
+  report.screenshots.push(await capture('4k',path.join(output,'meadow-photorealistic-4k.png')));
   await record('4K PNG dimensions and renderer state restoration');
 
   const persistence=await page.evaluate(async()=>{
     const a=window.__EZ_ENVIRONMENT__,s=a.studio;
-    await s.applyBiomePreset('forest');s.cameraPreset('ground');
+    await s.resetMeadowPreset();s.cameraPreset('ground');
     const brush={type:'circle',x:10,z:10,radius:5,layer:'grass',strength:-1};
     const before=structuredClone(a.environment.options.brushes);await s.envChange({brushes:[...before,brush]});
     const painted=structuredClone(a.environment.options.brushes);await s.undo();const undone=structuredClone(a.environment.options.brushes);await s.redo();const redone=structuredClone(a.environment.options.brushes);
     s.cameras.bookmarks[0]={mode:s.mode,camera:s.cameraState()};
     const saved=JSON.parse(JSON.stringify(s.project())),hash=a.environment.placement.hash;
-    await s.applyBiomePreset('desert');await s.loadProject(saved);
+    await s.resetMeadowPreset();await s.loadProject(saved);
     return {before,painted,undone,redone,saved,restored:JSON.parse(JSON.stringify(s.project())),hash,restoredHash:a.environment.placement.hash};
   });
   assert.deepEqual(persistence.undone,persistence.before);assert.deepEqual(persistence.redone,persistence.painted);
@@ -188,7 +188,7 @@ try{
     const a=window.__EZ_ENVIRONMENT__,s=a.studio,e=a.environment;
     const {exportGLB,exportEnvironmentPack,validateManifest}=await import('/export/exporters.js');
     const tree=await exportGLB(a.tree,{maxTextureSize:256}),treeView=new DataView(tree);
-    const saved=structuredClone(s.project());await s.applyBiomePreset('desert');await s.envChange({radius:24,appearance:'photorealistic'},{modified:false});
+    const saved=structuredClone(s.project());await s.resetMeadowPreset();await s.envChange({radius:24,appearance:'photorealistic'},{modified:false});
     const pack=await exportEnvironmentPack(e,{download:false,maxTextureSize:256});
     const validation=validateManifest(pack.manifest,pack.files);
     const result={treeMagic:treeView.getUint32(0,true),treeBytes:tree.byteLength,packBytes:pack.blob.size,validation,appearance:pack.manifest.presentation.appearance,assets:pack.manifest.assets.length,staticObjects:pack.manifest.staticObjects};
@@ -196,42 +196,68 @@ try{
   });
   assert.equal(exports.treeMagic,0x46546c67);assert.ok(exports.treeBytes>20&&exports.packBytes>1000&&exports.assets>0);
   assert.equal(exports.validation.valid,true);assert.equal(exports.appearance,'photorealistic');assert.ok(exports.staticObjects.some(item=>item.id==='terrain'));
-  await record('Real tree GLB and photographic Desert pack serialize valid bundled geometry and materials',exports);
+  await record('Real tree GLB and photographic Meadow pack serialize valid bundled geometry and materials',exports);
 
   const legacy=await page.evaluate(async()=>{
-    const a=window.__EZ_ENVIRONMENT__,s=a.studio;const {validateOptions}=await import('/environment/options.js');
+    const a=window.__EZ_ENVIRONMENT__,s=a.studio;
     const project=structuredClone(s.project());project.version=1;delete project.cameras;
-    project.environment=validateOptions({biome:'woodland',terrain:{amplitude:2},layers:{grass:{density:.123}}});
+    project.environment={biome:'woodland',terrain:{amplitude:2},layers:{grass:{density:.123}}};
     await s.loadProject(project);
     const result={composition:a.environment.options.composition,density:a.environment.options.layers.grass.density,biome:a.environment.options.biome,amplitude:a.environment.options.terrain.amplitude};
-    await s.applyBiomePreset('forest');return result;
+    await s.resetMeadowPreset();return result;
   });
-  assert.deepEqual(legacy,{composition:'legacy',density:.123,biome:'woodland',amplitude:2});
+  assert.deepEqual(legacy,{composition:'legacy',density:.123,biome:'meadow',amplitude:2});
   await record('Version 1 project retains legacy terrain and layer settings until preset upgrade');
 
-  const rapid=await page.evaluate(async()=>{
-    const e=window.__EZ_ENVIRONMENT__.environment,{applyBiome}=await import('/environment/biomes.js');
-    const baseline=structuredClone(e.options),before=e.ground.uuid;
-    const requests=['forest','desert','meadow','rocky'].map(id=>e.setOptions(applyBiome(baseline,id)));
-    const oldSceneRetained=e.ground.uuid===before;await Promise.all(requests);
-    return{biome:e.options.biome,loading:e.loading,oldSceneRetained,hash:e.placement.hash};
+  const migrated = await page.evaluate(async () => {
+    const { studio, environment } = window.__EZ_ENVIRONMENT__;
+    const saved = structuredClone(studio.project());
+    const results = [];
+    for (const biome of ['forest', 'desert', 'rocky']) {
+      const project = structuredClone(saved);
+      Object.assign(project.environment, { biome, seed: 23, radius: 24, terrain: { form: 'ridges', amplitude: 2, scale: 30 } });
+      project.environment.layers.grass.density = .123;
+      await studio.loadProject(project);
+      const current = environment.options;
+      results.push({ biome: current.biome, modified: current.modified, seed: current.seed,
+        terrain: current.terrain, grass: current.layers.grass.density,
+        texture: new URL(environment.ground.material.map.image.src).pathname });
+    }
+    return results;
   });
-  assert.equal(rapid.biome,'rocky');assert.equal(rapid.loading,false);assert.equal(rapid.oldSceneRetained,true);
-  await record('Rapid requests retain old scene while building and commit only the newest biome',rapid);
+  for (const result of migrated) {
+    assert.deepEqual(result, { biome: 'meadow', modified: true, seed: 23,
+      terrain: { form: 'ridges', amplitude: 2, scale: 30 }, grass: .123,
+      texture: '/textures/biomes/meadow-soil/color-1024.jpg' });
+  }
+  await page.getByRole('button', { name: 'Reset preset', exact: true }).click();
+  await page.waitForFunction(() => {
+    const { options, loading } = window.__EZ_ENVIRONMENT__.environment;
+    return !loading && !options.modified && options.terrain.form === 'rolling' &&
+      options.layers.grass.density === 1.5 && options.seed === 23;
+  });
+  await record('Removed biome saves migrate to Meadow and the reset control restores Meadow defaults');
+
+  const rapid=await page.evaluate(async()=>{
+    const e=window.__EZ_ENVIRONMENT__.environment,before=e.ground.uuid;
+    const requests=[21,22,23,24].map(seed=>e.setOptions({seed}));
+    const oldSceneRetained=e.ground.uuid===before;await Promise.all(requests);
+    return{biome:e.options.biome,seed:e.options.seed,loading:e.loading,oldSceneRetained};
+  });
+  assert.deepEqual(rapid,{biome:'meadow',seed:24,loading:false,oldSceneRetained:true});
+  await record('Rapid edits retain the current world until the latest Meadow generation is ready',rapid);
 
   const memory=await page.evaluate(async()=>{
     const a=window.__EZ_ENVIRONMENT__,e=a.environment,s=a.studio,cycles=[];
     for(let cycle=0;cycle<3;cycle++){
-      for(const biome of ['forest','desert','meadow','rocky']){
-        await s.applyBiomePreset(biome);await s.envChange({appearance:cycle%2?'photorealistic':'naturalistic'},{modified:false});a.render();
-      }
-      await s.applyBiomePreset('forest');await s.envChange({appearance:'naturalistic'},{modified:false});a.render();
+      await s.envChange({appearance:'photorealistic'},{modified:false});a.render();
+      await s.resetMeadowPreset();await s.envChange({appearance:'naturalistic'},{modified:false});a.render();
       cycles.push({...a.renderer.info.memory,materialCache:e.biomeMaterials.cache.size,sceneChildren:e.children.length,ground:e.ground.uuid});
     }
     return cycles;
   });
-  for(const key of ['geometries','textures','materialCache','sceneChildren'])assert.ok(memory[2][key]<=memory[1][key]+(key==='textures'?1:0),`${key} continues to grow after all biome assets are warm`);
-  await record('Repeated biome/style switching has bounded renderer resources after warmup',{cycles:memory});
+  for(const key of ['geometries','textures','materialCache','sceneChildren'])assert.ok(memory[2][key]<=memory[1][key]+(key==='textures'?1:0),`${key} continues to grow after Meadow assets are warm`);
+  await record('Repeated Meadow reset and appearance switching has bounded renderer resources after warmup',{cycles:memory});
   assert.deepEqual(report.errors,[],'No uncaught page errors');assert.deepEqual(report.externalRequests,[],'All application assets are bundled locally');
   const shaderErrors=report.consoleErrors.filter(message=>/Shader Error|VALIDATE_STATUS|WebGLProgram: Shader Error|THREE.WebGLProgram/.test(message));
   assert.deepEqual(shaderErrors,[],'Shaders compile without renderer errors');

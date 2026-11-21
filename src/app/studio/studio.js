@@ -1,22 +1,25 @@
 import * as THREE from 'three';
-import { PLANT_PRESETS, PLANT_ARCHETYPES, LEAF_DESIGNS, PLANT_BARK_TYPES, GRASS_CARD_LAYOUTS, GRASS_CARD_ATLASES, createPlantDefinition } from '../generators/plants.js';
+import { PLANT_PRESETS, PLANT_ARCHETYPES, LEAF_DESIGNS, PLANT_BARK_TYPES, GRASS_CARD_LAYOUTS, createPlantDefinition } from '../generators/plants.js';
 import { leafTextureInfo, leafTexturesForDesign, legacyLeafTexture } from '../generators/leaf-textures.js';
 import { ROCK_PRESETS, ROCK_ARCHETYPES, ROCK_SHAPE_PROFILES, createRockDefinition } from '../generators/rocks.js';
 import { PRESET_GROUPS, assetLayer, layerSpecies } from '../generators/catalog.js';
 import { GenerationClient } from './generation.js';
 import { WindController } from '../environment/wind.js';
-import { makeSpecies } from '../environment/species.js';
+import { makeAuthoredSpecies } from '../environment/species.js';
 import { LAYERS, QUALITY, validateOptions } from '../environment/options.js';
 import { exportAssetPack, exportScenePack, exportGLB, downloadBlob, exportPNG } from '../export/exporters.js';
 import { cleanTreeDefinition,prepareTreeProject,commitTreeProject } from './tree-project.js';
 import { disposeObject } from '../environment/assets.js';
 import { prepareAssetMaterials } from '../materials/pbr.js';
 import { awaitTextureReadiness } from '../materials/readiness.js';
-import { BIOMES, applyBiome } from '../environment/biomes.js';
+import { MEADOW, applyMeadowPreset } from '../environment/biomes.js';
 import { terrainHeight } from '../environment/placement.js';
 import { validateCameras, validateCameraState, validateLastAuthoredMode, chooseGroundPosition } from './viewport.js';
 import { GrassCardEditor } from './grass-card-editor.js';
 import { validateGrassCardEdits } from '../generators/grass-cards.js';
+import { GRASS_TWELVE_LAYOUT, GRASS_TYPES } from '../generators/grass-atlases.js';
+import { triangleCount } from '../generators/triangle-targets.js';
+import { createTriangleControls } from './triangle-controls.js';
 
 const STORAGE='ez-environment-project-v2';
 const title=s=>s.replace(/([A-Z])/g,' $1').replace(/^./,c=>c.toUpperCase());
@@ -62,7 +65,7 @@ export class Studio {
     this._cameraUpHandler=()=>this.moveCameraVertical(1);this._cameraDownHandler=()=>this.moveCameraVertical(-1);
     document.getElementById('camera-up').addEventListener('click',this._cameraUpHandler);
     document.getElementById('camera-down').addEventListener('click',this._cameraDownHandler);
-    this.environment.onStatus=this._envStatus=s=>{this.statusNode.classList.toggle('loading',!!s.loading);if(s.error)this.status(s.error.message,true);else if(s.loading)this.status('Generating environment…');else{this.status(`${BIOMES[this.environment.options.biome]?.name||'Environment'} ready.`);this.refreshEnvironmentStats();this.syncPreview();this.syncSceneAppearance?.();}};
+    this.environment.onStatus=this._envStatus=s=>{this.statusNode.classList.toggle('loading',!!s.loading);if(s.error)this.status(s.error.message,true);else if(s.loading)this.status('Generating environment…');else{this.status(`${MEADOW.name} ready.`);this.refreshEnvironmentStats();this.syncPreview();this.syncSceneAppearance?.();}};
     this.raycaster=new THREE.Raycaster();this.pointer=new THREE.Vector2();this.brush={enabled:false,radius:5,strength:-1,layer:'grass'};
     this.brushOutline=new THREE.LineLoop(new THREE.BufferGeometry().setAttribute('position',new THREE.BufferAttribute(new Float32Array(96*3),3)),new THREE.LineBasicMaterial({color:0xe4f4ab,depthTest:false,transparent:true,opacity:.95}));this.brushOutline.userData.editorOnly=true;this.brushOutline.frustumCulled=false;this.brushOutline.renderOrder=1000;this.brushOutline.visible=false;this.scene.add(this.brushOutline);
     this._paintHandler=event=>this.paintAt(event);this.renderer.domElement.addEventListener('pointerdown',this._paintHandler);
@@ -190,25 +193,34 @@ export class Studio {
     else if(!savedCamera)this.fit();
     if(this._modeTransition!==transition)return;
     if(savedCamera)this.restoreCamera(savedCamera);
-    this.persist();if(mode==='environment'||mode==='tree')this.status(mode==='environment'?`${BIOMES[this.environment.options.biome]?.name||'Environment'} ready${this.lastAuthoredMode?` - previewing your ${this.lastAuthoredMode}`:''}.`:'Tree editor ready.');
+    this.persist();if(mode==='environment'||mode==='tree')this.status(mode==='environment'?`${MEADOW.name} ready${this.lastAuthoredMode?` - previewing your ${this.lastAuthoredMode}`:''}.`:'Tree editor ready.');
   }
   async generate(fit=false,mode=this.mode){
     if(this._disposed||!['plant','rock'].includes(mode))return;
-    this.status(`Generating ${this.definitions[mode].archetype}…`);
-    const promise=this.client.generate(mode,this.definitions[mode]);this.pending=promise;
+    const definition=this.definitions[mode], requested=JSON.stringify(definition);
+    this.status(`Generating ${definition.archetype}…`);
+    const promise=this.client.generate(mode,definition);this.pending=promise;
     let asset;try{asset=await promise;}finally{if(this.pending===promise)this.pending=null;}
-    if(!asset)return;if(this._disposed||(this.mode!==mode&&!(this.mode==='environment'&&this.lastAuthoredMode===mode))){asset.dispose();return;}
+    if(!asset)return;
+    if(this._disposed || requested!==JSON.stringify(this.definitions[mode]) || (this.mode!==mode&&!(this.mode==='environment'&&this.lastAuthoredMode===mode))){asset.dispose();return;}
     this.asset?.dispose();this.previewWind.dispose();this.viewportGroup.clear();this.asset=asset;this.assetMode=mode;this.definitions[mode]=structuredClone(asset.definition);
-    this.viewportGroup.add(asset.lods[this.lod]);
-    for(const l of asset.lods)l.traverse(o=>{if(o.isMesh){o.castShadow=mode!=='plant';o.receiveShadow=true;if(mode==='plant')this.previewWind.attach(o.material,asset.definition.height,.08,!!o.geometry.attributes.windWeight);}});
+    this.showAssetDetail();
+    for(const l of [...asset.lods,asset.editorObject])l?.traverse(o=>{if(o.isMesh){o.castShadow=mode!=='plant';o.receiveShadow=true;if(mode==='plant')this.previewWind.attach(o.material,asset.definition.height,.08,!!o.geometry.attributes.windWeight);}});
     this.syncPreview();
     if(fit)this.fit(this.mode==='environment');
     if(this.grassEditor.editing)this.grassEditor.refreshPanel();else this.grassEditor.sync();
     this.updateAssetStats();this.persist();this.status(`${title(asset.definition.archetype)} ready · ${asset.ms.toFixed(0)} ms generation${asset.placement?.shortfall?` · ${asset.placement.shortfall} cluster members could not fit`:''}`);
+    return asset;
+  }
+  showAssetDetail(){
+    this.viewportGroup.clear();
+    if(!this.asset)return;
+    const editorObject=this.lod===0 && this.grassEditor.editing ? this.asset.editorObject : undefined;
+    this.viewportGroup.add(editorObject ?? this.asset.lods[this.lod]);
   }
   updateAssetStats(){
-    if(!this.asset)return;let tris=0;this.asset.lods[this.lod].traverse(o=>{if(o.geometry)tris+=(o.geometry.index?.count||o.geometry.attributes.position.count)/3;});
-    const s=this.panel.querySelector('.asset-stats');if(s)s.textContent=`${Math.round(tris).toLocaleString()} triangles · LOD ${this.lod} · ${this.asset.definitionHash}`;
+    if(this.assetMode!==this.mode)return;
+    this.triangleControls?.showCounts(this.asset?.lods.map(triangleCount),this.lod);
   }
   snapshot(mode=this.mode){return mode==='environment'?{mode,options:structuredClone(this.environment.options)}:{mode,definition:structuredClone(this.definitions[mode])};}
   remember(snapshot=this.snapshot()){this.history.push(snapshot);if(this.history.length>60)this.history.shift();this.future=[];this.updateViewportToolbar();}
@@ -227,7 +239,7 @@ export class Studio {
   async undo(){return this.travelHistory(this.history,this.future);}
   async redo(){return this.travelHistory(this.future,this.history);}
   renderPanel(){
-    this.panel.replaceChildren();this.grassEditor.sync();if(this.mode==='tree')return;
+    this.panel.replaceChildren();this.triangleControls=null;this.grassEditor.sync();if(this.mode==='tree')return;
     const header=el('div','studio-heading');header.append(el('p','eyebrow',this.mode==='environment'?'SCENE COMPOSITION':'PROCEDURAL AUTHORING'),el('h1','',this.mode==='environment'?'Environment':`${title(this.mode)} Studio`));
     header.append(el('p','studio-description',this.mode==='plant'?'Shape living forms, from low ground cover to branching shrubs.':this.mode==='rock'?'Sculpt pebbles, stones, boulders, and natural clusters.':'Compose a seeded world with layered vegetation and stone.'));this.panel.append(header);
     const body=el('div','studio-scroll');this.panel.append(body);
@@ -237,7 +249,11 @@ export class Studio {
     const selected=presets.find(p=>JSON.stringify(p.definition)===JSON.stringify(d))?.id||'';
     p.body.append(select('Preset',[['','Custom'],...PRESET_GROUPS.flatMap(g=>presets.filter(p=>p.group===g).map(p=>[p.id,p.name,g]))],selected,async id=>{if(!id)return;this.remember();this.definitions[mode]=this.grassEditor.withSavedLayouts(structuredClone(presets.find(p=>p.id===id).definition));this.renderPanel();await this.generate(true);}));
     const types=mode==='plant'?PLANT_ARCHETYPES:ROCK_ARCHETYPES;
-    p.body.append(select('Form',types.map(t=>[t,title(t)]),d.archetype,async type=>{this.definitions[mode]=this.grassEditor.withSavedLayouts((mode==='plant'?createPlantDefinition:createRockDefinition)(type));this.renderPanel();await this.generate(true);}));
+    p.body.append(select('Form',types.map(t=>[t,title(t)]),d.archetype,async type=>{
+      const overrides=type==='grass'?{cardLayout:GRASS_TWELVE_LAYOUT}:{};
+      this.definitions[mode]=this.grassEditor.withSavedLayouts((mode==='plant'?createPlantDefinition:createRockDefinition)(type,overrides));
+      this.renderPanel();await this.generate(true);
+    }));
     p.body.append(field('Seed',d.seed,0,4294967295,1,v=>this.change('seed',v)));
     p.body.append(action('New variation',async()=>{this.definitions[mode].seed=crypto.getRandomValues(new Uint32Array(1))[0];this.renderPanel();await this.generate();}));
     const form=section('Shape & structure');body.append(form.element);
@@ -255,8 +271,11 @@ export class Studio {
           if(d.archetype==='grass'){
             form.body.append(select('Representation',[['cards','Alpha texture cards'],['blades','Procedural blades']],d.grassRepresentation,v=>{this.change('grassRepresentation',v);this.renderPanel();}));
             if(d.grassRepresentation==='cards'){
-              form.body.append(select('Clump layout',GRASS_CARD_LAYOUTS.map(value=>[value,title(value)]),d.cardLayout,v=>{this.change('cardLayout',v);this.renderPanel();}));
-              form.body.append(select('Grass texture',GRASS_CARD_ATLASES.map(value=>[value,value==='meadow-v1'?'Meadow grass atlas':title(value)]),d.grassAtlas,v=>this.change('grassAtlas',v)));
+              form.body.append(select('Grass type',Object.entries(GRASS_TYPES),d.grassAtlas,v=>{
+                this.changeMany({grassAtlas:v,cardLayout:GRASS_TWELVE_LAYOUT});
+                this.renderPanel();
+              }));
+              form.body.append(select('Clump layout',GRASS_CARD_LAYOUTS.map(value=>[value,value===GRASS_TWELVE_LAYOUT?'12-plane clump':title(value)]),d.cardLayout,v=>{this.change('cardLayout',v);this.renderPanel();}));
               add('cardVariation','Card variation',0,1,.05);add('cardLean','Card lean',0,1,.05);
             }else add('bladeWidth','Blade width',.005,.12,.005);
             form.body.append(field('Seed heads',d.seedHeads,0,1,1,v=>{this.change('seedHeads',v);this.renderPanel();},'checkbox'));
@@ -295,8 +314,22 @@ export class Studio {
       surface.body.append(field('Weathering color',d.weatheringColor??'#657443',0,0,0,v=>this.change('weatheringColor',v),'color'));
     }
     if(mode==='rock'){surface.body.append(field('Roughness',d.roughness,0,1,.05,v=>this.change('roughness',v)));surface.body.append(field('Color variation',d.variation,0,1,.05,v=>this.change('variation',v)));surface.body.append(field('Flat shading',d.flatShading,0,0,0,v=>this.change('flatShading',v),'checkbox'));}
-    const preview=section('Preview & level of detail');body.append(preview.element);const lods=el('div','studio-button-row');
-    for(let i=0;i<3;i++)lods.append(action(i===0?'Full':`LOD ${i}`,()=>{this.lod=i;this.viewportGroup.clear();if(this.asset)this.viewportGroup.add(this.asset.lods[i]);this.grassEditor.sync();this.updateAssetStats();}));preview.body.append(lods,el('p','asset-stats','Generating…'));
+    const preview=section('Triangle targets & LODs');body.append(preview.element);
+    this.triangleControls=createTriangleControls(async targets=>{
+      this.remember();
+      if(targets)this.definitions[mode].triangleTargets=targets;
+      else delete this.definitions[mode].triangleTargets;
+      clearTimeout(this.debounce);
+      await this.generate();
+    },level=>{
+      this.lod=level;
+      if(this.assetMode===mode)this.showAssetDetail();
+      this.grassEditor.sync();
+      this.updateAssetStats();
+    },error=>this.status(error,true));
+    this.triangleControls.setTargets(d.triangleTargets);
+    this.triangleControls.showCounts(undefined,this.lod);
+    preview.body.append(this.triangleControls.element);
     preview.body.append(action('Frame asset · F',()=>this.fit()));
     const out=section('Save & use');body.append(out.element);
     this.exportOptions ||= {maxTextureSize:2048,includeInstancedScene:false,includeBakedChunks:false};
@@ -304,32 +337,55 @@ export class Studio {
     out.body.append(action('Save preset JSON',()=>downloadBlob(new Blob([JSON.stringify({format:'ez-asset',version:1,kind:mode,definition:this.definitions[mode]},null,2)],{type:'application/json'}),`${d.archetype}-preset.json`)));
     out.body.append(action('Load preset JSON',()=>this.openFile('asset')));
     out.body.append(el('p','','Models include assigned materials. Packs also include reusable textures and material descriptions.'));
-    out.body.append(action('Export GLB',async()=>{await this.ensureAsset();this.exportController=new AbortController();try{downloadBlob(await exportGLB(this.asset.lods[this.lod],{maxTextureSize:this.exportOptions.maxTextureSize,signal:this.exportController.signal}),`${this.asset.definition.archetype}-lod${this.lod}.glb`);}finally{this.exportController=null;}}));
-    out.body.append(action('Export asset + LOD pack',async()=>{await this.ensureAsset();this.exportController=new AbortController();try{await exportAssetPack(this.asset,this.asset.definition.archetype,{maxTextureSize:this.exportOptions.maxTextureSize,signal:this.exportController.signal});}finally{this.exportController=null;}}));
+    out.body.append(action('Export GLB',async()=>{
+      const level=this.lod, asset=await this.ensureAsset(mode);
+      await this.runAssetExport(async options=>{
+        const glb=await exportGLB(asset.lods[level],options);
+        downloadBlob(glb,`${asset.definition.archetype}-lod${level}.glb`);
+      });
+    }));
+    out.body.append(action('Export asset + LOD pack',async()=>{
+      const asset=await this.ensureAsset(mode);
+      await this.runAssetExport(options=>exportAssetPack(asset,asset.definition.archetype,options));
+    }));
     out.body.append(action('Cancel export',()=>this.exportController?.abort()));
     out.body.append(action('Export preview PNG',()=>this.capturePNG?this.capturePNG('viewport'):(this.render(),exportPNG(this.renderer,`${d.archetype}.png`))));
     out.body.append(action('Add to environment',async()=>{
-      await this.ensureAsset();const asset=makeSpecies(this.asset.definition.archetype,this.asset.definition);const id=`custom_${mode}_${asset.definitionHash}`;
-      const layer=assetLayer(this.asset.definition);
+      const {definition}=await this.ensureAsset(mode);
+      const asset=await makeAuthoredSpecies(definition);const id=`custom_${mode}_${asset.definitionHash}`;
+      const layer=assetLayer(definition);
       if(this.environment.registry.has(id)){asset.dispose();await this.envChange({layers:{[layer]:{...this.environment.options.layers[layer],species:id,speciesChoices:[]}}});}else await this.environment.addSpecies(id,asset,layer);
       await this.setMode('environment');this.persist();this.status(`Added ${d.archetype} to the ${layer} layer.`);
     },'studio-button primary'));
     this.updateAssetStats();
   }
-  async ensureAsset(){clearTimeout(this.debounce);if(this.pending)await this.pending;await this.generate();if(!this.asset)throw new Error('Generate an asset first.');}
+  async ensureAsset(mode=this.mode){
+    clearTimeout(this.debounce);
+    if(this.pending)await this.pending;
+    const matches=()=>this.mode===mode && this.assetMode===mode &&
+      JSON.stringify(this.asset.definition)===JSON.stringify(this.definitions[mode]);
+    if(this.mode===mode&&!matches())await this.generate(false,mode);
+    if(!matches())throw new Error('Wait for the current asset to finish generating and try again.');
+    return this.asset;
+  }
+  async runAssetExport(write){
+    if(this.exportController)throw new Error('An export is already in progress.');
+    const controller=new AbortController();
+    this.exportController=controller;
+    try{await write({maxTextureSize:this.exportOptions.maxTextureSize,signal:controller.signal});}
+    finally{this.exportController=null;}
+  }
   renderEnvironment(body){
     this.layerStats=new Map();
     if(this.lastAuthoredMode){const preview=section('Your latest asset');body.append(preview.element);preview.body.append(el('p','studio-description',`Previewing your ${this.lastAuthoredMode} in the selected environment.`),action('Frame latest asset',()=>this.fit(true)),action(`Edit ${this.lastAuthoredMode}`,()=>this.setMode(this.lastAuthoredMode)));}
-    const o=this.environment.options,biomeSection=section('Biome');body.append(biomeSection.element);
-    const grid=el('div','biome-grid');
-    for(const [id,biome] of Object.entries(BIOMES)){
-      const card=action('',()=>this.applyBiomePreset(id),'biome-card');card.dataset.biome=id;card.setAttribute('aria-label',biome.name);card.setAttribute('aria-pressed',String((o.biome==='woodland'?'forest':o.biome)===id));card.title=biome.subtitle;
-      const thumb=el('img');thumb.src=`/images/biomes/${id}.jpg`;thumb.alt='';thumb.loading='lazy';card.append(thumb,el('span','',biome.name));grid.append(card);
-    }
-    const summary=el('div','biome-summary');this.presetState=el('span','preset-state',o.composition==='legacy'?'Legacy scene':o.modified?'Modified':'Preset');summary.append(this.presetState,action('Reset preset',()=>this.applyBiomePreset(o.biome==='woodland'?'forest':o.biome)));
-    biomeSection.body.append(grid,summary,el('p','studio-description',BIOMES[o.biome==='woodland'?'forest':o.biome]?.subtitle||'Choose a complete environment.'));
-    biomeSection.body.append(field('World seed',o.seed,0,4294967295,1,v=>this.envChange({seed:v},{modified:false})));
-    biomeSection.body.append(field('Keep tree alongside other assets',o.includeAuthoredTree,0,0,0,v=>this.envChange({includeAuthoredTree:v}),'checkbox'));
+    const o = this.environment.options, meadow = section(MEADOW.name);
+    body.append(meadow.element);
+    const summary = el('div', 'meadow-preset');
+    this.presetState = el('span', 'preset-state', o.composition === 'legacy' ? 'Legacy scene' : o.modified ? 'Modified' : 'Preset');
+    summary.append(this.presetState, action('Reset preset', () => this.resetMeadowPreset()));
+    meadow.body.append(summary);
+    meadow.body.append(field('World seed',o.seed,0,4294967295,1,v=>this.envChange({seed:v},{modified:false})));
+    meadow.body.append(field('Keep tree alongside other assets',o.includeAuthoredTree,0,0,0,v=>this.envChange({includeAuthoredTree:v}),'checkbox'));
     const settings=section('Terrain');body.append(settings.element);
     settings.body.append(field('World radius · m',o.radius,16,256,8,v=>this.envChange({radius:v},{modified:false})));
     settings.body.append(select('Landform',[['rolling','Rolling hills'],['dunes','Wind-shaped dunes'],['ridges','Rocky ridges']],o.terrain.form||'rolling',v=>this.envChange({terrain:{...this.environment.options.terrain,form:v}})));
@@ -393,7 +449,11 @@ export class Studio {
     output.body.append(field('Include baked chunk GLBs',this.exportOptions.includeBakedChunks,0,0,0,v=>this.exportOptions.includeBakedChunks=v,'checkbox'));
     output.body.append(action('Regenerate same seed',()=>this.environment.regenerate()));
     output.body.append(el('p','','Includes textured models, LODs, reusable texture files and a material catalog for Unity.'));
-    output.body.append(action('Export environment pack',async()=>{this.exportController=new AbortController();this.status('Exporting trees, assets, and placement records…');try{await exportScenePack(this.environment,[...(this.tree.visible?[this.tree]:[]),...(this.forest.visible?this.forest.children:[])],{...this.exportOptions,signal:this.exportController.signal,treeColliders:true});this.status('Environment pack exported.');}finally{this.exportController=null;}},'studio-button primary'));
+    output.body.append(action('Export environment pack',()=>this.runAssetExport(async options=>{
+      this.status('Exporting trees, assets, and placement records…');
+      await exportScenePack(this.environment,[...(this.tree.visible?[this.tree]:[]),...(this.forest.visible?this.forest.children:[])],{...this.exportOptions,...options,treeColliders:true});
+      this.status('Environment pack exported.');
+    }),'studio-button primary'));
     output.body.append(action('Cancel export',()=>this.exportController?.abort()));
     output.body.append(action('Save project JSON',()=>this.saveProject()));
     output.body.append(el('p','studio-description','The pack contains reusable GLBs, three LODs, terrain, placement records, collider metadata, and a versioned manifest.'));
@@ -407,7 +467,7 @@ export class Studio {
     if(record)this.remember(before);this.syncPreview();this.refreshTreeSources?.();this.syncSceneAppearance?.();this.updateViewportToolbar();
     if(this.presetState)this.presetState.textContent=this.environment.options.composition==='legacy'?'Legacy scene':this.environment.options.modified?'Modified':'Preset';this.persist();
   }
-  async applyBiomePreset(id){await this.envChange(applyBiome(this.environment.options,id),{modified:false});this.renderPanel();}
+  async resetMeadowPreset(){await this.envChange(applyMeadowPreset(this.environment.options),{modified:false});this.renderPanel();}
   renderCameraBookmarks(body){
     const group=section('Camera bookmarks',false);body.append(group.element);
     group.body.append(el('p','studio-description','Save the current camera, then recall it in its original editor mode.'));
@@ -492,7 +552,7 @@ export class Studio {
     const currentIds=new Set(this.environment.options.customSpecies.map(c=>c.id));
     const registry=new Map([...this.environment.registry].filter(([id])=>!currentIds.has(id))),created=[];
     try{
-      for(const c of options.customSpecies){if(registry.has(c.id))throw new Error('Custom species cannot replace a built-in species.');const a=makeSpecies(c.definition.archetype,c.definition);registry.set(c.id,a);created.push(a);}
+      for(const c of options.customSpecies){if(registry.has(c.id))throw new Error('Custom species cannot replace a built-in species.');const a=await makeAuthoredSpecies(c.definition);registry.set(c.id,a);created.push(a);}
       for(const l of Object.values(options.layers))for(const id of [l.species,...l.speciesChoices.map(c=>c.id)])if(!registry.has(id))throw new Error(`Unknown species: ${id}`);
       // Finish every asynchronous preparation before committing the live tree.
       for (const asset of created) await prepareAssetMaterials(asset);
@@ -516,7 +576,7 @@ export class Studio {
     this.grassEditor.saved=grassLayouts;this.grassEditor.active=false;
     if(preparedTree){commitTreeProject(this.tree,preparedTree);this.refreshTreeUI?.();}
     this.refreshTreeSources?.();
-    await this.setMode(data.mode||'environment',{rememberCamera:false});this.persist();this.status(data.version===1?'Legacy workspace restored. Choose a biome to upgrade its composition.':'Workspace restored.');
+    await this.setMode(data.mode||'environment',{rememberCamera:false});this.persist();this.status(data.version===1?'Legacy workspace restored. Use Reset preset in Environment to apply Meadow defaults.':'Workspace restored.');
   }
   update(time){if(this.viewportGroup.visible&&this.assetMode==='plant'&&this.asset){this.previewWind.update(time,this.environment.options.wind);if(this.grassEditor.editing)this.previewWind.strength.value=0;}this.grassEditor.update();}
   dispose(){

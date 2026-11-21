@@ -22,3 +22,16 @@ courtesy to the authors and contributors at ambientcg.
 
 The leaf textures in `leaves/` are bundled with the EZ-Tree demo app and are
 licensed under the project's own license (see repository LICENSE).
+
+The materials under `trees/` were created for EZ Environment. See the
+[species texture notes](trees/README.md) for artwork provenance and prompts.
+
+The grass card atlases under `grass/species/` were created for EZ Environment.
+See the [grass texture notes](grass/species/README.md) for artwork provenance
+and prompts.
+
+The additional leaf, grass, fern and weathered-wood PBR companions are derived
+from their bundled artwork. The rock PBR maps under `rocks/` are derived from
+the weathered-rock and sandstone sets in `biomes/`. The endgrain, stem, petal
+and pollen surfaces were created with ImageGen for EZ Environment. See
+[plant provenance](plants/provenance.json) and [wood provenance](wood/provenance.json).

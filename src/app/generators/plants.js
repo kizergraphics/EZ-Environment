@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { EXTRA_PLANT_FORMS, EXTRA_PLANT_DEFAULTS, buildPlantForm } from './plant-forms.js';
 import { GRASS_CARD_LAYOUTS, GRASS_CARD_ATLASES, generateGrassCards, validateGrassCardEdits } from './grass-cards.js';
 import { LEAF_TEXTURES, leafTextureInfo, legacyLeafTexture } from './leaf-textures.js';
+import { validateTriangleTargets } from './triangle-targets.js';
 
 /** Original botanical meshes with serializable PBR material descriptors. No DOM, renderer, or source assets required. */
 export const PLANT_ARCHETYPES = Object.freeze(['shrub', 'bush', 'sapling', 'fern', 'weed', 'groundCover', 'flower', ...EXTRA_PLANT_FORMS]);
@@ -99,11 +100,13 @@ export function createPlantDefinition(archetype = 'shrub', overrides = {}) {
   if(d.leafShape!==undefined&&!['lance','clover'].includes(d.leafShape))throw new TypeError('Unknown plant leafShape.');
   // Preserve extension metadata through JSON round trips without making it executable.
   for (const key of Object.keys(overrides).sort()) {
-    if (!(key in result) && key !== 'leafShape' && key !== '__proto__' && key !== 'constructor' && key !== 'prototype') {
+    if (!(key in result) && key !== 'triangleTargets' && key !== 'leafShape' && key !== '__proto__' && key !== 'constructor' && key !== 'prototype') {
       const extra = overrides[key];
       if (extra === null || ['string', 'boolean'].includes(typeof extra) || typeof extra === 'number' && Number.isFinite(extra)) result[key] = extra;
     }
   }
+  const triangleTargets = validateTriangleTargets(d.triangleTargets);
+  if (triangleTargets) result.triangleTargets = triangleTargets;
   return result;
 }
 

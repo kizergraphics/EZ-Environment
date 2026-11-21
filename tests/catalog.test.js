@@ -5,7 +5,7 @@ import { ASSET_PRESETS, assetLayer, layerSpecies } from '../src/app/generators/c
 import { PLANT_PRESETS, createPlantDefinition, generatePlant } from '../src/app/generators/plants.js';
 import { ROCK_PRESETS, createRockDefinition, generateRock } from '../src/app/generators/rocks.js';
 import { makeSpecies, createRegistry } from '../src/app/environment/species.js';
-import { BIOMES, applyBiome } from '../src/app/environment/biomes.js';
+import { applyMeadowPreset } from '../src/app/environment/biomes.js';
 import { validateOptions } from '../src/app/environment/options.js';
 
 test('catalog IDs, layers and biome mixtures resolve to regenerable built-ins',async()=>{
@@ -17,8 +17,8 @@ test('catalog IDs, layers and biome mixtures resolve to regenerable built-ins',a
   const registry=await createRegistry([],null,false);
   try{
     for(const p of ASSET_PRESETS){assert.equal(assetLayer(p.definition),p.layer);assert.ok(registry.has(p.id));assert.ok(layerSpecies(p.layer).some(s=>s.id===p.id));assert.deepEqual(registry.get(p.id).definition,p.definition);}
-    for(const id of Object.keys(BIOMES))for(const [layer,options]of Object.entries(applyBiome(validateOptions(),id).layers)){
-      for(const s of options.speciesChoices)assert.ok(layerSpecies(layer).some(p=>p.id===s.id),`${id}/${layer}/${s.id}`);
+    for(const [layer,options]of Object.entries(applyMeadowPreset(validateOptions()).layers)){
+      for(const s of options.speciesChoices)assert.ok(layerSpecies(layer).some(p=>p.id===s.id),`Meadow/${layer}/${s.id}`);
     }
   }finally{registry.forEach(a=>a.dispose());}
 });

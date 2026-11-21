@@ -2,7 +2,7 @@
   "seed": 23399,
   "type": "deciduous",
   "bark": {
-    "type": "Bark001",
+    "type": "Bark004",
     "tint": 16774097,
     "flatShading": false,
     "textured": true,

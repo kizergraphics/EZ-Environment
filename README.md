@@ -11,7 +11,7 @@
 [![CI](https://github.com/kizergraphics/EZ-Environment/actions/workflows/ci.yml/badge.svg)](https://github.com/kizergraphics/EZ-Environment/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-b8d89f)](LICENSE)
 
-Create game-ready natural assets without leaving your desktop. EZ Environment is a local, offline-first procedural authoring studio for shaping individual assets, composing seeded biomes, and exporting reusable PBR content for real-time projects.
+Create game-ready natural assets without leaving your desktop. EZ Environment is a local, offline-first procedural authoring studio for shaping individual assets, composing seeded Meadow scenes, and exporting reusable PBR content for real-time projects.
 
 <p align="center">
   <a href="https://github.com/kizergraphics/EZ-Environment/releases/latest"><strong>Download the latest portable Windows build</strong></a>
@@ -22,7 +22,7 @@ Create game-ready natural assets without leaving your desktop. EZ Environment is
 </p>
 
 <p align="center">
-  <img src="https://github.com/kizergraphics/EZ-Environment/releases/download/v1.2.0/ez-environment-forest-ground.png" alt="EZ Environment forest biome viewed from ground level" width="100%">
+  <img src="https://github.com/kizergraphics/EZ-Environment/releases/download/v1.2.0/ez-environment-meadow.png" alt="EZ Environment Meadow scene" width="100%">
 </p>
 
 ## What you can make
@@ -30,7 +30,7 @@ Create game-ready natural assets without leaving your desktop. EZ Environment is
 - **Procedural trees** — start from ash, aspen, oak, pine, bush, and trellis presets, then shape the trunk, branches, leaves, bark, wind, and level of detail.
 - **Plants and ground cover** — author shrubs, saplings, ferns, weeds, flowers, grasses, cacti, succulents, cushions, young conifers, and deadwood from a 30-preset catalog.
 - **Rocks and formations** — create pebbles, fieldstones, boulders, slabs, clusters, and connected outcrops from 22 presets with editable silhouettes and surface treatments.
-- **Complete biomes** — compose forest, desert, meadow, and rocky worlds with deterministic terrain, vegetation, stones, lighting, fog, wind, and density controls.
+- **Meadow environments** — compose seeded grassland scenes with deterministic terrain, vegetation, stones, lighting, fog, wind, and density controls.
 
 Everything is seed-driven, so a useful result can be reproduced, adjusted, saved as a project, or regenerated as a variation.
 
@@ -51,17 +51,11 @@ Everything is seed-driven, so a useful result can be reproduced, adjusted, saved
 |---|---|---|
 | <img src="https://github.com/kizergraphics/EZ-Environment/releases/download/v1.2.0/ez-environment-tree-editor.png" alt="Procedural tree editor" width="100%"> | <img src="https://github.com/kizergraphics/EZ-Environment/releases/download/v1.2.0/ez-environment-plant-studio.png" alt="Plant Studio showing a generated shrub" width="100%"> | <img src="https://github.com/kizergraphics/EZ-Environment/releases/download/v1.2.0/ez-environment-rock-studio.png" alt="Rock Studio showing a generated fieldstone" width="100%"> |
 
-The individual studios share the same live 3D workspace. Move between asset design and environment composition without exporting intermediate files, and preview the latest authored asset directly in a biome before committing to an export.
+The individual studios share the same live 3D workspace. Move between asset design and environment composition without exporting intermediate files, and preview the latest authored asset directly in the Meadow scene before committing to an export.
 
-## Four seeded biomes
+## Meadow environment
 
-| Forest | Desert |
-|---|---|
-| <img src="https://github.com/kizergraphics/EZ-Environment/releases/download/v1.2.0/ez-environment-forest.png" alt="Generated forest biome" width="100%"> | <img src="https://github.com/kizergraphics/EZ-Environment/releases/download/v1.2.0/ez-environment-desert.png" alt="Generated desert biome" width="100%"> |
-| **Meadow** | **Rocky** |
-| <img src="https://github.com/kizergraphics/EZ-Environment/releases/download/v1.2.0/ez-environment-meadow.png" alt="Generated meadow biome" width="100%"> | <img src="https://github.com/kizergraphics/EZ-Environment/releases/download/v1.2.0/ez-environment-rocky.png" alt="Generated rocky biome" width="100%"> |
-
-Each biome is a starting point rather than a fixed scene. The world seed, terrain profile, scatter layers, authored species, lighting, fog, and wind remain editable.
+Meadow is the Environment preset. Adjust the world seed, terrain profile, scatter layers, lighting, fog, and wind, or use **Reset preset** to restore Meadow settings. Older projects open under Meadow with their saved environment controls and authored assets.
 
 ## Materials and detail
 
@@ -84,7 +78,7 @@ The executable is currently unsigned, so Windows may display an unknown-publishe
 
 1. Choose a preset or form in the Tree, Plant, or Rock studio.
 2. Set a seed and tune shape, structure, surface, and LOD controls while orbiting the live preview.
-3. Add authored assets to Environment and compose a biome with procedural or painted placement.
+3. Add authored assets to Environment and compose a Meadow scene with procedural or painted placement.
 4. Save the project, capture a PNG, export an individual GLB, or build an asset/environment pack.
 
 Projects preserve authoring definitions, placement, painted masks, appearance, lighting, and per-mode cameras. Older project files are migrated when opened.

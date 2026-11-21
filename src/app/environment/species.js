@@ -5,6 +5,7 @@ import { generateRock, createRockDefinition, ROCK_ARCHETYPES } from '../generato
 import { ASSET_PRESETS } from '../generators/catalog.js';
 import { disposeObject } from './assets.js';
 import { extraSpecies } from './biome-species.js';
+import { applyAssetTriangleTargets, triangleSimplifierReady } from '../generators/triangle-targets.js';
 
 export function createGrass(variant = 'medium') {
   const settings = {short:[.55,.8,'sparseCross',12001],medium:[1,1,'naturalOffset',12002],tall:[1.7,.75,'staggeredStar',12003],clump:[1.15,1.2,'denseTuft',12004]}[variant];
@@ -29,6 +30,17 @@ export function makeSpecies(kind, definition) {
   if (kind === 'grass') return createGrass(definition?.variant);
   if (ROCK_ARCHETYPES.includes(kind)) return generateRock(definition || createRockDefinition(kind),{variants:true});
   return compactPlant(generatePlant(definition || createPlantDefinition(kind)));
+}
+
+export async function makeAuthoredSpecies(definition) {
+  const asset = makeSpecies(definition.archetype, definition);
+  try {
+    if (asset.definition.triangleTargets) await triangleSimplifierReady;
+    return applyAssetTriangleTargets(asset);
+  } catch (error) {
+    asset.dispose();
+    throw error;
+  }
 }
 // Only untagged legacy mapless foliage can share a baked material. PBR slots must remain distinct. Bake each material's linear color
 // into vertices, preserving every triangle while allowing one draw per instance batch.
@@ -82,7 +94,7 @@ export async function createRegistry(custom, cache, useModels = true) {
   }
   for (const entry of custom) {
     if (!/^[a-zA-Z0-9_-]{1,80}$/.test(entry.id) || registry.has(entry.id)) throw new Error('Custom species must have a unique safe ID.');
-    registry.set(entry.id,makeSpecies(entry.definition.archetype,entry.definition));
+    registry.set(entry.id,await makeAuthoredSpecies(entry.definition));
   }
   return registry;
   } catch(error) {

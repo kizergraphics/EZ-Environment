@@ -5,14 +5,13 @@ import { Environment } from './environment.js';
 import { APP_TREE_PRESET_NAMES, loadPresetWithTextures } from './textures.js';
 import { random } from './environment/random.js';
 import { terrainHeight } from './environment/placement.js';
-import { applyBiome } from './environment/biomes.js';
-import { validateOptions } from './environment/options.js';
+import { applyMeadowPreset } from './environment/biomes.js';
 import { awaitTextureReadiness } from './materials/readiness.js';
 
 export async function createScene(renderer) {
   const scene = new THREE.Scene();
   scene.fog = new THREE.FogExp2(0x94b9f8, 0.0015);
-  const environment = new Environment(applyBiome(validateOptions({composition:'biome',includeAuthoredTree:false,exclusions:[]}),'meadow'));
+  const environment = new Environment(applyMeadowPreset({ exclusions: [] }));
   scene.add(environment);
   const camera = new THREE.PerspectiveCamera(50,window.innerWidth/window.innerHeight,0.1,2000);
   camera.position.set(80,38,90);

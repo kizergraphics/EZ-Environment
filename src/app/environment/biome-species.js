@@ -132,6 +132,7 @@ export async function addFoliageVariants(registry){
         const geometry=mergeGeometries(parts);parts.forEach(g=>g.dispose());const group=new THREE.Group();group.name=`lod${level}`;
         const material = new THREE.MeshStandardMaterial({map,color:'#ffffff',roughness:1,side:THREE.DoubleSide,alphaTest:.45,alphaToCoverage:true});
         material.userData.pbrFamily = 'foliage';
+        material.userData.pbrVariant = file;
         material.userData.pbrPreserveColorMap = true;
         group.add(new THREE.Mesh(geometry,material));return group;
       });

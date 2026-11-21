@@ -1,20 +1,41 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { terrainHeight,terrainNormal,sampleCanopy,sampleMoisture } from './placement.js';
+import { terrainHeight,terrainNormal,sampleMoisture } from './placement.js';
 import { biomeNoise } from './random.js';
+import { MEADOW } from './biomes.js';
 
 export function terrainBlend(x,z,options){
-  const variation=biomeNoise(x/21,z/21,options.seed),slope=1-terrainNormal(x,z,options)[1];
-  const wet=sampleMoisture(x,z,options);
-  const blend=options.composition!=='biome'?wet*.35:options.biome==='forest'?Math.min(.85,sampleCanopy(x,z,options)*.45+wet*.35):options.biome==='desert'?Math.max(0,variation-.5)*.7+slope*.8:options.biome==='rocky'?Math.max(0,1-slope*5)*wet*.65:Math.max(0,variation-.75)*.8;
+  const blend = options.composition === 'biome'
+    ? Math.max(0, biomeNoise(x / 21, z / 21, options.seed) - .75) * .8
+    : sampleMoisture(x, z, options) * .35;
   // Meet the repeating horizon's primary surface without a hard blend boundary.
   const half=options.radius*1.25,edge=Math.max(0,Math.min(1,(half-Math.max(Math.abs(x),Math.abs(z)))/(half*.1)));
   return Math.max(0,Math.min(1,blend))*edge;
 }
-export const terrainTileSize=options=>options.biome==='meadow'?1.5:5;
+export const TERRAIN_TILE_SIZE = 1.5;
 
-// Four independently baked patches bound surface memory; the distant ring keeps
-// detailed repeating PBR maps rather than stretching a bake across the horizon.
+// Sample the broad biome color changes on a fixed grid. Vertex colors carry
+// those changes into both the viewport and standard glTF materials.
+function terrainTintField(options, half) {
+  const size = 65;
+  const field = new Float32Array(size * size);
+  for (let z = 0; z < size; z++) {
+    for (let x = 0; x < size; x++) {
+      field[z * size + x] = terrainBlend(
+        (x / (size - 1) * 2 - 1) * half, (z / (size - 1) * 2 - 1) * half, options,
+      );
+    }
+  }
+  return (x, z) => {
+    const u = THREE.MathUtils.clamp((x / half + 1) * .5 * (size - 1), 0, size - 1);
+    const v = THREE.MathUtils.clamp((z / half + 1) * .5 * (size - 1), 0, size - 1);
+    const i = Math.min(size - 2, Math.floor(u)), j = Math.min(size - 2, Math.floor(v));
+    const a = THREE.MathUtils.lerp(field[j * size + i], field[j * size + i + 1], u - i);
+    const b = THREE.MathUtils.lerp(field[(j + 1) * size + i], field[(j + 1) * size + i + 1], u - i);
+    return THREE.MathUtils.lerp(a, b, v - j);
+  };
+}
+
 export function createTerrainGeometry(options) {
   const extent=options.radius*2.5,half=extent/2,outer=1000;
   const spacing=options.terrain.amplitude?Math.min(1,options.terrain.scale/24):4;
@@ -28,24 +49,27 @@ export function createTerrainGeometry(options) {
   for(const [width,depth,x,z] of [[2000,outer-half,0,(outer+half)/2],[2000,outer-half,0,-(outer+half)/2],[outer-half,extent,(outer+half)/2,0],[outer-half,extent,-(outer+half)/2,0]]){
     const g=new THREE.PlaneGeometry(width,depth);g.rotateX(-Math.PI/2);g.translate(x,0,z);pieces.push(g);
   }
-  for(const [piece,g] of pieces.entries()){
-    const p=g.attributes.position,colors=new Float32Array(p.count*3),uv=g.attributes.uv,detailUV=new Float32Array(p.count*2);
-    for(let i=0;i<p.count;i++){
-      const x=p.getX(i),z=p.getZ(i);p.setY(i,terrainHeight(x,z,options)-.015);
-      detailUV[i*2]=x/terrainTileSize(options);detailUV[i*2+1]=z/terrainTileSize(options);
-      const tint=.9+biomeNoise(x/21,z/21,options.seed)*.15;
-      colors.fill(tint,i*3,i*3+3);
-      if(piece<4){const tile=tiles[piece];uv.setXY(i,(x-tile.minX)/tile.size,(z-tile.minZ)/tile.size);}
-      else uv.setXY(i,x/terrainTileSize(options),z/terrainTileSize(options));
+  const [base, accent] = MEADOW.colors.map(color => new THREE.Color(color));
+  const variation = new THREE.Color().setRGB(accent.r / base.r, accent.g / base.g, accent.b / base.b);
+  const tintAt = terrainTintField(options, half);
+  for (const g of pieces) {
+    const p = g.attributes.position, uv = g.attributes.uv, normals = g.attributes.normal;
+    const colors = new Float32Array(p.count * 3);
+    for (let i = 0; i < p.count; i++) {
+      const x = p.getX(i), z = p.getZ(i);
+      p.setY(i, terrainHeight(x, z, options) - .015);
+      normals.setXYZ(i, ...terrainNormal(x, z, options));
+      uv.setXY(i, x / TERRAIN_TILE_SIZE, z / TERRAIN_TILE_SIZE);
+      const shade = .9 + biomeNoise(x / 21, z / 21, options.seed) * .1;
+      const blend = tintAt(x, z);
+      colors[i * 3] = Math.min(1, shade * THREE.MathUtils.lerp(1, variation.r, blend));
+      colors[i * 3 + 1] = Math.min(1, shade * THREE.MathUtils.lerp(1, variation.g, blend));
+      colors[i * 3 + 2] = Math.min(1, shade * THREE.MathUtils.lerp(1, variation.b, blend));
     }
-    g.setAttribute('color',new THREE.BufferAttribute(colors,3));
-    g.setAttribute('uv1',new THREE.BufferAttribute(detailUV,2));
-    // Analytic normals are identical on duplicated vertices along tile seams.
-    const normals=g.attributes.normal;
-    for(let i=0;i<p.count;i++)normals.setXYZ(i,...terrainNormal(p.getX(i),p.getZ(i),options));
+    g.setAttribute('color', new THREE.BufferAttribute(colors, 3));
   }
-  const result=mergeGeometries(pieces,true);pieces.forEach(g=>g.dispose());
-  for(const group of result.groups)if(group.materialIndex>=4)group.materialIndex=4;
+  const result = mergeGeometries(pieces);
+  pieces.forEach(g => g.dispose());
   result.userData.terrainTiles=tiles;
   result.computeBoundingBox();result.computeBoundingSphere();return result;
 }

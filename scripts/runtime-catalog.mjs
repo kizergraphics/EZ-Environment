@@ -67,8 +67,8 @@ try{
   for(const [name,scroll]of [['plants',0],['plants-lower',575],['rocks',1120],['formations',1600]]){await page.locator('#catalog-gallery').evaluate((el,scroll)=>el.scrollTop=scroll,scroll);await page.screenshot({path:path.join(output,`${name}.png`)});}
   for(const level of [1,2]){await page.evaluate(level=>window.catalogGallery.render(level),level);await page.locator('#catalog-gallery').evaluate(el=>el.scrollTop=0);await page.screenshot({path:path.join(output,`plants-lod${level}.png`)});}
   await page.evaluate(()=>window.catalogGallery.dispose());record('New preset visual galleries captured');
-  for(const biome of ['forest','meadow','desert','rocky'])for(const appearance of ['naturalistic','photorealistic']){
-    const metrics=await page.evaluate(async({biome,appearance})=>{const a=window.__EZ_ENVIRONMENT__,s=a.studio;s.lastAuthoredMode=null;await s.setMode('environment');await s.applyBiomePreset(biome);await s.envChange({radius:64,appearance});s.renderPanel();s.cameraPreset('overview');await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));a.render();return{counts:s.environment.placement.count,calls:a.renderer.info.render.calls,triangles:a.renderer.info.render.triangles};},{biome,appearance});
+  for(const biome of ['meadow'])for(const appearance of ['naturalistic','photorealistic']){
+    const metrics=await page.evaluate(async({biome,appearance})=>{const a=window.__EZ_ENVIRONMENT__,s=a.studio;s.lastAuthoredMode=null;await s.setMode('environment');await s.resetMeadowPreset();await s.envChange({radius:64,appearance});s.renderPanel();s.cameraPreset('overview');await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));a.render();return{counts:s.environment.placement.count,calls:a.renderer.info.render.calls,triangles:a.renderer.info.render.triangles};},{biome,appearance});
     await page.screenshot({path:path.join(output,`${biome}-${appearance}-overview.png`)});
     await page.evaluate(()=>window.__EZ_ENVIRONMENT__.studio.cameraPreset('ground'));await page.screenshot({path:path.join(output,`${biome}-${appearance}-ground.png`)});
     record(`${biome}/${appearance}: composition renders`,metrics);
