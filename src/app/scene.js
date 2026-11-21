@@ -25,7 +25,7 @@ export async function createScene(renderer) {
   const refreshTreeSources=()=>{
     if(environment.suspendSceneSources)return;
     const trees=environment.options.includeAuthoredTree ? [tree] : [];
-    environment.options.treeExclusions=[...(environment.options.treeExclusions||[]).filter(s=>s.source!=='scene-tree'),...trees.map(t=>({source:'scene-tree',type:'circle',x:t.position.x,z:t.position.z,radius:Math.max(1.5,t.options.branch.radius[0]*1.3)}))];
+    environment.options.treeExclusions=[...(environment.options.treeExclusions||[]).filter(s=>s.source!=='scene-tree'),...trees.map(t=>({source:'scene-tree',type:'circle',x:t.position.x,z:t.position.z,radius:Math.max(1.5,(t.growth?.trunkRadius ?? t.options.branch.radius[0])*1.3)}))];
     environment.options.canopySources=[...(environment.options.canopySources||[]).filter(s=>s.source!=='scene-tree'),...trees.map(t=>{const box=new THREE.Box3().setFromObject(t),size=box.getSize(new THREE.Vector3());return{source:'scene-tree',x:t.position.x,z:t.position.z,radius:Math.max(2,size.x*.5,size.z*.5),strength:.9};})];
   };
   const syncSceneVisibility=(mode,lastAuthoredMode=null)=>{

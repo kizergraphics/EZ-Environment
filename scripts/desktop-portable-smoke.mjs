@@ -270,6 +270,25 @@ try {
     console.log(`PASS portable ${mode} catalog (${expected} presets)`);
   }
   await page.evaluate(()=>window.__EZ_ENVIRONMENT__.studio.setMode('tree'));
+  await page.locator('#ui-container [data-tab="parameters"]').click();
+  await page.evaluate(() => { window.portableTreeSkeleton = window.__EZ_ENVIRONMENT__.tree.skeleton; });
+  const heightInput = page.getByRole('spinbutton', { name: 'Tree height in meters' });
+  await heightInput.fill('24.5');
+  await heightInput.press('Tab');
+  await page.waitForFunction(() => window.__EZ_ENVIRONMENT__.tree.targetHeight === 24.5);
+  const resizedTree = await page.evaluate(() => {
+    const tree = window.__EZ_ENVIRONMENT__.tree;
+    const height = Math.max(0, ...[tree.branchesMesh, tree.leavesMesh].map(mesh => {
+      mesh.geometry.computeBoundingBox();
+      return mesh.geometry.boundingBox.max.y;
+    }));
+    return { height, regenerated: tree.skeleton !== window.portableTreeSkeleton };
+  });
+  assert.ok(resizedTree.regenerated && Math.abs(resizedTree.height - 24.5) < .001);
+  checks.treeHeight = resizedTree;
+  await page.getByRole('button', { name: 'Reset height', exact: true }).click();
+  await page.waitForFunction(() => window.__EZ_ENVIRONMENT__.tree.targetHeight === undefined);
+  console.log('PASS portable tree height regrowth');
   await page.evaluate(()=>window.__EZ_ENVIRONMENT__.studio.setMode('environment'));
   assert.equal(await page.locator('.biome-card').count(), 0);
   assert.equal(await page.getByLabel('Landform', { exact: true }).count(), 0);

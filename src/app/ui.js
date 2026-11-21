@@ -8,8 +8,9 @@ import { APP_TREE_PRESET_NAMES, BarkType, LeafType, applyTreeTextures, loadPrese
 import { Environment } from './environment';
 import { version } from '../../package.json';
 import { cleanTreeDefinition,prepareTreeProject,commitTreeProject } from './studio/tree-project.js';
+import { disposeObject } from './environment/assets.js';
 import { createTreeLODAsset } from './generators/tree-lods.js';
-import { adjustTreeGeometry, TREE_HEIGHT_LIMITS, treeHeight, treeHeightAdjustment, validateTreeHeight } from './generators/tree-height.js';
+import { TREE_HEIGHT_LIMITS, treeHeight, validateTreeHeight } from './generators/tree-height.js';
 import { triangleCount } from './generators/triangle-targets.js';
 import { createTriangleControls } from './studio/triangle-controls.js';
 
@@ -148,9 +149,9 @@ function createSlider(label, value, min, max, step, onChange, onCommit) {
     const val = parseFloat(e.target.value);
     valueInput.value = formatValue(val, step);
     setFill();
-    onChange(val);
+    onChange?.(val);
   });
-  if (onCommit) slider.addEventListener('change', onCommit);
+  if (onCommit) slider.addEventListener('change', () => onCommit(Number(slider.value)));
 
   valueInput.addEventListener('change', (e) => {
     let val = parseFloat(e.target.value);
@@ -158,8 +159,8 @@ function createSlider(label, value, min, max, step, onChange, onCommit) {
     slider.value = val;
     valueInput.value = formatValue(val, step);
     setFill();
-    onChange(val);
-    onCommit?.();
+    onChange?.(val);
+    onCommit?.(val);
   });
 
   sliderWrapper.appendChild(slider);
@@ -540,7 +541,7 @@ export function setupUI(tree, environment, renderer, scene, camera, orbitControl
   let previewLevel = 0;
   let lastBuildMs = null;
   let previewLODs = null;
-  let naturalTreeHeight = treeHeight(tree.branchesMesh.geometry, tree.leavesMesh.geometry);
+  let naturalTreeHeight = tree.growth?.naturalHeight ?? treeHeight(tree.branchesMesh.geometry, tree.leavesMesh.geometry);
   let exportPreviewButton;
   let lastGoodTree=cleanTreeDefinition(tree);
   const notifyTreeChanged=()=>{lastGoodTree=cleanTreeDefinition(tree);onTreeChanged();};
@@ -595,28 +596,22 @@ export function setupUI(tree, environment, renderer, scene, camera, orbitControl
     previewLODs = null;
   }
 
-  function applyLODPreview() {
+  function applyLODPreview(target = tree) {
     const t0 = performance.now();
     let branches, leaves;
-    let woodScale = 1;
-    if (previewLODs || tree.triangleTargets || tree.targetHeight !== undefined) {
-      previewLODs ??= createTreeLODAsset(tree, undefined, { forPreview: true });
-      const adjustment = treeHeightAdjustment(previewLODs.lods[0], tree.targetHeight);
-      woodScale = adjustment.woodScale;
+    if (previewLODs || target.triangleTargets || target.targetHeight !== undefined) {
+      previewLODs ??= createTreeLODAsset(target);
       const [bark, foliage] = previewLODs.lods[previewLevel].children;
       branches = bark.geometry.clone();
       leaves = foliage.geometry.clone();
-      adjustTreeGeometry(branches, adjustment);
-      adjustTreeGeometry(leaves, adjustment);
     } else {
-      ({ branches, leaves } = tree.createGeometry(Tree.defaultLODLevels[previewLevel].detail));
+      ({ branches, leaves } = target.createGeometry(Tree.defaultLODLevels[previewLevel].detail));
     }
     lastBuildMs = performance.now() - t0;
-    tree.branchesMesh.geometry.dispose();
-    tree.branchesMesh.geometry = branches;
-    tree.leavesMesh.geometry.dispose();
-    tree.leavesMesh.geometry = leaves;
-    if (tree.trellisMesh) tree.trellisMesh.scale.y = woodScale;
+    target.branchesMesh.geometry.dispose();
+    target.branchesMesh.geometry = branches;
+    target.leavesMesh.geometry.dispose();
+    target.leavesMesh.geometry = leaves;
   }
 
   function setPreviewLevel(level) {
@@ -640,25 +635,32 @@ export function setupUI(tree, environment, renderer, scene, camera, orbitControl
   // Parameters Tab Content
   // ============================================================================
 
-  const onChange = () => {
-    try{
-    const t0 = performance.now();
-    const prepared=prepareTreeProject(cleanTreeDefinition(tree),{options:lastGoodTree});commitTreeProject(tree,prepared);
-    lastBuildMs = performance.now() - t0;
-    invalidatePreviewLODs();
-    naturalTreeHeight = treeHeight(tree.branchesMesh.geometry, tree.leavesMesh.geometry);
-    if (previewLevel > 0 || tree.triangleTargets || tree.targetHeight !== undefined) {
-      applyLODPreview();
-    }
-    tree.traverse((o) => {
-      if (o.material) {
-        o.material.needsUpdate = true;
+  const onChange = (definition = cleanTreeDefinition(tree)) => {
+    let prepared;
+    try {
+      const t0 = performance.now();
+      prepared = prepareTreeProject(definition, { options: lastGoodTree });
+      invalidatePreviewLODs();
+      if (previewLevel > 0 || prepared.triangleTargets) applyLODPreview(prepared);
+      commitTreeProject(tree, prepared);
+      prepared = null;
+      lastBuildMs = performance.now() - t0;
+      naturalTreeHeight = tree.growth?.naturalHeight ?? treeHeight(tree.branchesMesh.geometry, tree.leavesMesh.geometry);
+      tree.traverse(object => {
+        if (object.material) object.material.needsUpdate = true;
+      });
+      updateInfoDisplays();
+      notifyTreeChanged();
+    } catch (error) {
+      if (prepared) {
+        invalidatePreviewLODs();
+        disposeObject(prepared);
       }
-    });
-    // Update info displays
-    updateInfoDisplays();
-    notifyTreeChanged();
-    }catch(error){tree.options.copy(lastGoodTree);applyTreeTextures(tree);refreshAllControls();window.__EZ_ENVIRONMENT__?.studio.status(`Tree change not applied: ${error.message}`,true);}
+      tree.options.copy(lastGoodTree);
+      applyTreeTextures(tree);
+      refreshAllControls();
+      window.__EZ_ENVIRONMENT__?.studio.status(`Tree change not applied: ${error.message}`, true);
+    }
   };
 
   // ----- Presets Section -----
@@ -671,8 +673,9 @@ export function setupUI(tree, environment, renderer, scene, camera, orbitControl
       loadPresetWithTextures(tree, val);
       tree.triangleTargets = undefined;
       tree.targetHeight = undefined;
+      tree.growth = undefined;
       invalidatePreviewLODs();
-      naturalTreeHeight = treeHeight(tree.branchesMesh.geometry, tree.leavesMesh.geometry);
+      naturalTreeHeight = tree.growth?.naturalHeight ?? treeHeight(tree.branchesMesh.geometry, tree.leavesMesh.geometry);
       if (previewLevel > 0) {
         applyLODPreview();
       }
@@ -702,8 +705,8 @@ export function setupUI(tree, environment, renderer, scene, camera, orbitControl
 
   const sizeSection = createSection('Tree size', 'cubeTransparent', true);
   const heightSlider = createSlider('Height · m', naturalTreeHeight, TREE_HEIGHT_LIMITS.min, heightSliderMaximum(), .1,
-    value => updateTreeHeight(value),
-    () => { if (lastGoodTree.targetHeight !== tree.targetHeight) notifyTreeChanged(); },
+    undefined,
+    updateTreeHeight,
   );
   heightSlider.element.querySelector('input[type="number"]').setAttribute('aria-label', 'Tree height in meters');
   heightSlider.element.querySelector('input[type="range"]').setAttribute('aria-label', 'Adjust tree height');
@@ -711,7 +714,6 @@ export function setupUI(tree, environment, renderer, scene, camera, orbitControl
   sizeSection.add(createButton('Reset height', 'undo', () => {
     if (tree.targetHeight === undefined) return;
     updateTreeHeight(undefined);
-    notifyTreeChanged();
   }));
   parametersTab.appendChild(sizeSection.element);
 
@@ -720,13 +722,10 @@ export function setupUI(tree, environment, renderer, scene, camera, orbitControl
   }
 
   function updateTreeHeight(value) {
-    const previous = tree.targetHeight;
     try {
-      tree.targetHeight = validateTreeHeight(value);
-      applyLODPreview();
-      updateInfoDisplays();
+      const targetHeight = validateTreeHeight(value);
+      if (tree.targetHeight !== targetHeight) onChange({ ...cleanTreeDefinition(tree), targetHeight });
     } catch (error) {
-      tree.targetHeight = previous;
       updateInfoDisplays();
       window.__EZ_ENVIRONMENT__?.studio.status(error.message, true);
     }
@@ -734,7 +733,7 @@ export function setupUI(tree, environment, renderer, scene, camera, orbitControl
 
   const lodSection = createSection('Triangle targets & LODs', 'cubeTransparent', true);
   const triangleControls = createTriangleControls(targets => {
-    const next = createTreeLODAsset(tree, { triangleTargets: targets }, { forPreview: true });
+    const next = createTreeLODAsset(tree, { triangleTargets: targets, targetHeight: tree.targetHeight });
     invalidatePreviewLODs();
     previewLODs = next;
     tree.triangleTargets = targets;
@@ -1383,8 +1382,8 @@ export function setupUI(tree, environment, renderer, scene, camera, orbitControl
           if(file.size>8*1024*1024)throw new Error('Tree preset exceeds 8 MB.');
           const prepared=prepareTreeProject(JSON.parse(e.target.result),tree);commitTreeProject(tree,prepared);
           invalidatePreviewLODs();
-          naturalTreeHeight = treeHeight(tree.branchesMesh.geometry, tree.leavesMesh.geometry);
-          if (previewLevel > 0 || tree.triangleTargets || tree.targetHeight !== undefined) {
+          naturalTreeHeight = tree.growth?.naturalHeight ?? treeHeight(tree.branchesMesh.geometry, tree.leavesMesh.geometry);
+          if (previewLevel > 0 || tree.triangleTargets) {
             applyLODPreview();
           }
           refreshAllControls();
@@ -1416,8 +1415,8 @@ export function setupUI(tree, environment, renderer, scene, camera, orbitControl
   setupMobileToggle(panel, header);
   return {refresh(){
     lastGoodTree=cleanTreeDefinition(tree);invalidatePreviewLODs();previewLevel=0;
-    naturalTreeHeight = treeHeight(tree.branchesMesh.geometry, tree.leavesMesh.geometry);
-    if(tree.triangleTargets || tree.targetHeight !== undefined)applyLODPreview();
+    naturalTreeHeight = tree.growth?.naturalHeight ?? treeHeight(tree.branchesMesh.geometry, tree.leavesMesh.geometry);
+    if(tree.triangleTargets)applyLODPreview();
     lodButtons.forEach((b,i)=>b.classList.toggle('active',i===0));refreshAllControls();
   }};
 }

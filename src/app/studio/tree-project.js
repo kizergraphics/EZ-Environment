@@ -3,7 +3,7 @@ import { applyTreeTextures } from '../textures.js';
 import { disposeObject } from '../environment/assets.js';
 import { validateTreeProject } from './project-validation.js';
 import { triangleCount, validateTriangleTargets } from '../generators/triangle-targets.js';
-import { validateTreeHeight } from '../generators/tree-height.js';
+import { growTree, validateTreeHeight } from '../generators/tree-height.js';
 
 export function cleanTreeDefinition(tree) {
   const o=tree.options;
@@ -19,7 +19,7 @@ export function prepareTreeProject(input,currentTree) {
     prepared.options.copy(definition);
     prepared.targetHeight=validateTreeHeight(input.targetHeight);
     prepared.triangleTargets=triangleTargets;
-    applyTreeTextures(prepared);prepared.generate();
+    applyTreeTextures(prepared);growTree(prepared,prepared.targetHeight);
     const minimum=1+Number(prepared.leavesMesh.geometry.index.count>0)+(prepared.trellisMesh?triangleCount(prepared.trellisMesh):0);
     const invalidLevel=triangleTargets?.findIndex(target=>target!==null&&target<minimum)??-1;
     if(invalidLevel>=0)throw new Error(`LOD ${invalidLevel} needs at least ${minimum} triangles to retain its mesh parts.`);
@@ -33,6 +33,6 @@ export function prepareTreeProject(input,currentTree) {
 // loop retain that identity. Only transfer an already-generated, validated tree.
 export function commitTreeProject(target,prepared) {
   disposeObject(target);target.clear();
-  for(const key of ['options','rng','branchQueue','branches','leaves','skeleton','branchesMesh','leavesMesh','trellisMesh','lod','triangleTargets','targetHeight'])target[key]=prepared[key];
+  for(const key of ['options','rng','branchQueue','branches','leaves','skeleton','branchesMesh','leavesMesh','trellisMesh','lod','triangleTargets','targetHeight','growth'])target[key]=prepared[key];
   target.add(...prepared.children);
 }

@@ -21,8 +21,7 @@ try{
   page.on('console',message=>{if(message.type()==='error')report.consoleErrors.push(message.text());});
   page.on('request',request=>{const target=request.url();if(/^https?:/.test(target)&&!target.startsWith(url))report.externalRequests.push(target);});
   await page.goto(url,{waitUntil:'networkidle'});await page.waitForFunction(()=>window.__EZ_ENVIRONMENT__?.ready,{timeout:60000});
-  // Exercise the original Tree + 24-tree backdrop workflow explicitly; new
-  // workspaces now open in Meadow Environment mode without that legacy backdrop.
+  // Exercise the Tree editor and version 1 project migration.
   await page.evaluate(async()=>{const s=window.__EZ_ENVIRONMENT__.studio,p=structuredClone(s.project());p.version=1;p.mode='tree';delete p.cameras;await s.loadProject(p);});
   // Captured identity references live only in this isolated test browser.
   await page.evaluate(()=>{
@@ -53,7 +52,7 @@ try{
     const saved=JSON.parse(localStorage.getItem('ez-environment-project-v2'));
     return{seed,live:app.tree.options.seed,saved:saved.tree.seed,mode:saved.mode,clean:!Object.hasOwn(saved.tree.bark,'maps')&&!Object.hasOwn(saved.tree.leaves,'map'),sourceCount:saved.environment.treeExclusions.filter(s=>s.source==='scene-tree').length};
   });
-  assert.equal(immediate.live,immediate.seed);assert.equal(immediate.saved,immediate.seed);assert.equal(immediate.mode,'tree');assert.ok(immediate.clean);assert.equal(immediate.sourceCount,25);record('Tree-only control change immediately autosaves clean JSON',immediate);
+  assert.equal(immediate.live,immediate.seed);assert.equal(immediate.saved,immediate.seed);assert.equal(immediate.mode,'tree');assert.ok(immediate.clean);assert.equal(immediate.sourceCount,1);record('Tree-only control change immediately autosaves clean JSON',immediate);
   // Wait for the intentional 180 ms tree-to-environment debounce, then its worker.
   await page.waitForTimeout(250);await page.waitForFunction(()=>!window.__EZ_ENVIRONMENT__.environment.loading);
 
@@ -65,7 +64,7 @@ try{
   await expand(sub('Radius'));await control(sub('Radius'),'Level 0').fill('3.8');await control(sub('Radius'),'Level 0').press('Tab');
   await expand(sub('Length'));await control(sub('Length'),'Level 1').fill('45');await control(sub('Length'),'Level 1').press('Tab');
   const sources=await page.evaluate(()=>{const e=window.__EZ_ENVIRONMENT__.environment,saved=JSON.parse(localStorage.getItem('ez-environment-project-v2'));return{canopy:e.options.canopySources.find(s=>s.source==='scene-tree'&&s.x===0&&s.z===0).radius,exclusion:e.options.treeExclusions.find(s=>s.source==='scene-tree'&&s.x===0&&s.z===0).radius,canopies:e.options.canopySources.filter(s=>s.source==='scene-tree').length,trunks:e.options.treeExclusions.filter(s=>s.source==='scene-tree').length,savedRadius:saved.tree.branch.radius[0]};});
-  assert.ok(Math.abs(sources.exclusion-3.8*1.3)<1e-9);assert.notEqual(sources.canopy,sourcesBefore.canopy);assert.equal(sources.canopies,25);assert.equal(sources.trunks,25);assert.equal(sources.savedRadius,3.8);record('Hero resizing refreshes and autosaves canopy and trunk exclusions',sources);
+  assert.ok(Math.abs(sources.exclusion-3.8*1.3)<1e-9);assert.notEqual(sources.canopy,sourcesBefore.canopy);assert.equal(sources.canopies,1);assert.equal(sources.trunks,1);assert.equal(sources.savedRadius,3.8);record('Hero resizing refreshes and autosaves canopy and trunk exclusions',sources);
   await page.waitForTimeout(250);await page.waitForFunction(()=>!window.__EZ_ENVIRONMENT__.environment.loading);
 
   await page.evaluate(()=>{window.__treeProof.before=window.__treeProof.snapshot();});
@@ -89,6 +88,53 @@ try{
   const seedControl=page.locator('#tab-parameters .control-row').filter({has:page.locator('.control-label').filter({hasText:/^Seed$/})}).locator('input[type="number"]');await seedControl.fill(String((preset.seed+1)%65536));await seedControl.press('Tab');
   const afterEdit=await page.evaluate(()=>{const t=window.__EZ_ENVIRONMENT__.tree;let finite=true;t.traverse(o=>{if(o.geometry)for(const a of Object.values(o.geometry.attributes))finite&&=a.array.every(Number.isFinite);});return{copy:typeof t.options.copy==='function',finite,seed:t.options.seed,textured:!!t.branchesMesh.material.map&&!!t.leavesMesh.material.map};});
   assert.equal(afterEdit.seed,(preset.seed+1)%65536);assert.ok(afterEdit.copy&&afterEdit.finite&&afterEdit.textured);record('Imported original tree remains editable and finite',afterEdit);
+  const heightSlider = page.getByRole('slider', { name: 'Adjust tree height' });
+  const heightNumber = page.getByRole('spinbutton', { name: 'Tree height in meters' });
+  await heightSlider.scrollIntoViewIfNeeded();
+  await page.evaluate(() => {
+    const tree = window.__EZ_ENVIRONMENT__.tree;
+    window.heightBefore = { skeleton: tree.skeleton, branches: tree.branchesMesh.geometry, seed: tree.options.seed };
+  });
+  const track = await heightSlider.boundingBox();
+  await page.mouse.move(track.x + track.width * .5, track.y + track.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(track.x + track.width * .77, track.y + track.height / 2, { steps: 5 });
+  assert.equal(await page.evaluate(() => {
+    const tree = window.__EZ_ENVIRONMENT__.tree;
+    return tree.skeleton === window.heightBefore.skeleton &&
+      tree.branchesMesh.geometry === window.heightBefore.branches && tree.targetHeight === undefined;
+  }), true);
+  const sliderHeight = Number(await heightNumber.inputValue());
+  await page.mouse.up();
+  await page.waitForFunction(height => window.__EZ_ENVIRONMENT__.tree.targetHeight === height, sliderHeight);
+  const committed = await page.evaluate(async () => {
+    const { treeHeight } = await import('/generators/tree-height.js');
+    const app = window.__EZ_ENVIRONMENT__;
+    const tree = app.tree;
+    const project = structuredClone(app.studio.project());
+    const result = {
+      newSkeleton: tree.skeleton !== window.heightBefore.skeleton,
+      seed: tree.options.seed,
+      previousSeed: window.heightBefore.seed,
+      measured: treeHeight(tree.branchesMesh.geometry, tree.leavesMesh.geometry),
+      stored: project.tree.targetHeight,
+    };
+    const positions = tree.branchesMesh.geometry.attributes.position.array.slice();
+    await app.studio.loadProject(project);
+    result.sameAfterLoad = tree.branchesMesh.geometry.attributes.position.array.every((value, i) => positions[i] === value);
+    return result;
+  });
+  assert.ok(committed.newSkeleton && committed.sameAfterLoad);
+  assert.equal(committed.seed, committed.previousSeed);
+  assert.equal(committed.stored, sliderHeight);
+  assert.ok(Math.abs(committed.measured - sliderHeight) < .001);
+  await heightNumber.fill('12.5');
+  await heightNumber.press('Tab');
+  await page.waitForFunction(() => window.__EZ_ENVIRONMENT__.tree.targetHeight === 12.5);
+  await page.getByRole('button', { name: 'Reset height', exact: true }).click();
+  await page.waitForFunction(() => window.__EZ_ENVIRONMENT__.tree.targetHeight === undefined && !window.__EZ_ENVIRONMENT__.tree.growth);
+  record('Tree height regenerates on slider release and numeric commit, survives project restore, and resets', committed);
+
   await page.screenshot({path:path.join(output,'tree-workflow-verified.png')});
   await page.waitForTimeout(250);await page.waitForFunction(()=>!window.__EZ_ENVIRONMENT__.environment.loading);
 

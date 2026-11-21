@@ -957,8 +957,8 @@ export async function exportScenePack(environment, treesArray, options = {}) {
       if (!registry.has(id)) {
         const asset = createTreeLODAsset(tree, definition);
         generated.add(asset);
-        const length = definition.branch.length[0] * (asset.heightAdjustment?.woodScale ?? 1),
-          radius = definition.branch.radius[0];
+        const length = asset.trunkLength ?? definition.branch.length[0],
+          radius = asset.trunkRadius ?? definition.branch.radius[0];
         registry.set(id, {
           ...asset,
           definition,

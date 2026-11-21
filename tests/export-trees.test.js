@@ -5,7 +5,7 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { strFromU8 } from 'three/addons/libs/fflate.module.js';
 import { Tree } from '../build/ez-tree.es.js';
 import { createTreeLODAsset } from '../src/app/generators/tree-lods.js';
-import { treeHeight, validateTreeHeight } from '../src/app/generators/tree-height.js';
+import { growTree, treeHeight, validateTreeHeight } from '../src/app/generators/tree-height.js';
 import { triangleCount, triangleSimplifierReady } from '../src/app/generators/triangle-targets.js';
 import {
   exportScenePack,
@@ -86,40 +86,54 @@ test('scene packs keep each tree’s triangle targets and report the generated L
   }
 });
 
-test('resizing redistributes the existing geometry without changing LOD topology or triangle budgets', async () => {
+test('committed height grows a new skeleton with square leaf cards and matching preview and export', async () => {
   await triangleSimplifierReady;
   const source = trees();
   const [tree] = source;
-  tree.triangleTargets = [501, 201, 61];
-  const baseline = createTreeLODAsset(tree);
+  const base = { length: { ...tree.options.branch.length }, radius: { ...tree.options.branch.radius }, leafSize: tree.options.leaves.size };
+  const naturalHeight = treeHeight(tree.branchesMesh.geometry, tree.leavesMesh.geometry);
+  const naturalSkeleton = tree.skeleton;
+  const naturalBark = tree.branchesMesh.geometry.attributes.position.array.slice();
   try {
-    for (const height of [.2, 14, 90]) {
+    for (const height of [.1, 14, 90, 1000]) {
       tree.targetHeight = height;
-      const asset = createTreeLODAsset(tree);
+      growTree(tree, height);
+      assert.notEqual(tree.skeleton, naturalSkeleton);
+      assert.equal(tree.growth.naturalHeight, naturalHeight);
+      assert.deepEqual(tree.options.branch.length, base.length);
+      assert.deepEqual(tree.options.branch.radius, base.radius);
+      assert.equal(tree.options.leaves.size, base.leafSize);
+      const { branchesMesh: bark, leavesMesh: foliage } = tree;
+      const tolerance = height * .000001;
+      assert.ok(Math.abs(treeHeight(bark.geometry, foliage.geometry) - height) < tolerance);
+      const barkPositions = bark.geometry.attributes.position.array;
+      assert.ok(barkPositions.some((value, i) => i % 3 !== 1 && value !== naturalBark[i]));
+      const positions = foliage.geometry.attributes.position;
+      for (let i = 0; i < positions.count; i += 4) {
+        const a = new THREE.Vector3().fromBufferAttribute(positions, i);
+        const b = new THREE.Vector3().fromBufferAttribute(positions, i + 1);
+        const c = new THREE.Vector3().fromBufferAttribute(positions, i + 2);
+        assert.ok(Math.abs(a.distanceTo(b) - b.distanceTo(c)) < tolerance);
+      }
+
+      const automatic = createTreeLODAsset(tree);
+      const fitted = createTreeLODAsset(tree, { targetHeight: height, triangleTargets: [501, 201, 61] });
       try {
-        const [bark, foliage] = asset.lods[0].children;
-        assert.ok(Math.abs(treeHeight(bark.geometry, foliage.geometry) - height) < .00001);
-        assert.ok(asset.lods.every((lod, i) => triangleCount(lod) <= tree.triangleTargets[i]));
-        for (const [level, lod] of asset.lods.entries()) {
-          for (const [part, mesh] of lod.children.entries()) {
-            const { geometry } = mesh;
-            const original = baseline.lods[level].children[part].geometry;
-            assert.deepEqual(geometry.index.array, original.index.array);
-            assert.deepEqual(geometry.attributes.uv.array, original.attributes.uv.array);
-            assert.equal(geometry.getAttribute('leafAnchorY'), undefined);
-            const position = geometry.attributes.position;
-            const from = original.attributes.position;
-            assert.ok(position.array.every(Number.isFinite));
-            for (let i = 0; i < position.count; i++) {
-              assert.equal(position.getX(i), from.getX(i));
-              assert.equal(position.getZ(i), from.getZ(i));
-            }
-          }
-        }
-      } finally { asset.dispose(); }
+        const [exportedBark, exportedLeaves] = automatic.lods[0].children;
+        assert.deepEqual(exportedBark.geometry.attributes.position.array, barkPositions);
+        assert.deepEqual(exportedLeaves.geometry.attributes.position.array, positions.array);
+        const [fittedBark, fittedLeaves] = fitted.lods[0].children;
+        assert.ok(Math.abs(treeHeight(fittedBark.geometry, fittedLeaves.geometry) - height) < tolerance);
+        assert.ok(fitted.lods.every((lod, i) => triangleCount(lod) <= [501, 201, 61][i]));
+      } finally {
+        automatic.dispose();
+        fitted.dispose();
+      }
     }
+    growTree(tree);
+    assert.equal(tree.growth, undefined);
+    assert.deepEqual(tree.branchesMesh.geometry.attributes.position.array, naturalBark);
   } finally {
-    baseline.dispose();
     source.forEach(disposeTree);
   }
 });

@@ -1,5 +1,3 @@
-import { Vector3 } from 'three';
-
 export const TREE_HEIGHT_LIMITS = Object.freeze({ min: .1, max: 1000 });
 
 export function validateTreeHeight(value) {
@@ -21,54 +19,67 @@ export function treeHeight(branches, leaves) {
   return Math.max(0, top(branches), top(leaves));
 }
 
-export function treeHeightAdjustment(reference, height) {
-  if (height === undefined) return { woodScale: 1, leafScale: 1 };
-  const [bark, foliage] = reference.children;
-  const parts = { bark: bark.geometry, foliage: foliage.geometry };
-  const naturalHeight = treeHeight(parts.bark, parts.foliage);
-  let retention = Math.min(1, height / naturalHeight);
-  const points = parts.foliage.getAttribute('position');
-  const anchors = parts.foliage.getAttribute('leafAnchorY');
-  for (let i = 0; i < points.count; i++) {
-    const offset = points.getY(i) - anchors.getX(i);
-    if (offset > height) retention = Math.min(retention, .98 * height / offset);
+export function fitTreeHeight(branches, leaves, height) {
+  const measured = treeHeight(branches, leaves);
+  if (!Number.isFinite(measured) || measured <= 0) {
+    throw new Error('The generated tree needs a finite height above ground.');
   }
-
-  const barkTop = top(parts.bark);
-  let woodScale = barkTop > 0 ? height / barkTop : Infinity;
-  for (let i = 0; i < points.count; i++) {
-    const y = points.getY(i);
-    const retained = (y - anchors.getX(i)) * retention;
-    // Branches and leaf anchors move together. The retained part of each
-    // card's vertical span stays intact and the rest follows the same scale.
-    if (y > retained) woodScale = Math.min(woodScale, (height - retained) / (y - retained));
-  }
-  return { woodScale, leafScale: retention + (1 - retention) * woodScale };
+  return height / measured;
 }
 
-export function adjustTreeGeometry(geometry, { woodScale, leafScale }) {
-  const anchors = geometry.getAttribute('leafAnchorY');
-  if (!anchors) {
-    if (woodScale !== 1) geometry.scale(1, woodScale, 1);
-    return;
+// Grow with the authored seed and settings. A height changes growth lengths by
+// branch level. Radii and foliage stay round and square in their local frames.
+export function growTree(tree, targetHeight) {
+  tree.generate();
+  tree.growth = undefined;
+  if (targetHeight === undefined) return;
+
+  const naturalHeight = treeHeight(tree.branchesMesh.geometry, tree.leavesMesh.geometry);
+  const ratio = fitTreeHeight(tree.branchesMesh.geometry, tree.leavesMesh.geometry, targetHeight);
+  const maturity = Math.min(4, Math.max(.25, ratio));
+  const authored = tree.options;
+  const growth = {
+    ...authored,
+    branch: {
+      ...authored.branch,
+      length: { ...authored.branch.length },
+      radius: { ...authored.branch.radius },
+      force: { ...authored.branch.force },
+      gnarliness: { ...authored.branch.gnarliness },
+    },
+    leaves: { ...authored.leaves },
+  };
+  for (const [level, length] of Object.entries(authored.branch.length)) {
+    growth.branch.length[level] = length * ratio * maturity ** (-.15 * Number(level));
   }
-  geometry.deleteAttribute('leafAnchorY');
-  if (woodScale === 1 && leafScale === 1) return;
-  const position = geometry.getAttribute('position');
-  const normal = geometry.getAttribute('normal');
-  const direction = new Vector3();
-  for (let index = 0; index < position.count; index++) {
-    const anchor = anchors.getX(index);
-    position.setY(index, anchor * woodScale + (position.getY(index) - anchor) * leafScale);
-    if (leafScale !== 1) {
-      direction.fromBufferAttribute(normal, index);
-      direction.y /= leafScale;
-      direction.normalize();
-      normal.setXYZ(index, direction.x, direction.y, direction.z);
-    }
+  const radiusScale = ratio * maturity ** .1;
+  growth.branch.radius[0] *= radiusScale;
+  growth.branch.force.strength *= radiusScale;
+  const bendScale = Math.sqrt(Math.min(1, radiusScale));
+  for (const level of Object.keys(growth.branch.gnarliness)) growth.branch.gnarliness[level] *= bendScale;
+
+  // Keep natural leaf size unless a very small tree needs smaller leaf cards.
+  const maximumCard = authored.leaves.size * (1 + authored.leaves.sizeVariance);
+  if (maximumCard > 0) growth.leaves.size *= Math.min(1, targetHeight / (4 * maximumCard));
+
+  tree.options = growth;
+  try {
+    tree.generate();
+  } finally {
+    tree.options = authored;
   }
-  position.needsUpdate = true;
-  normal.needsUpdate = true;
-  geometry.computeBoundingBox();
-  geometry.computeBoundingSphere();
+
+  // The branches and leaves were emitted from the new skeleton. Calibrate its
+  // final dimensions uniformly, including the horizontal axes.
+  const branches = tree.branchesMesh.geometry, leaves = tree.leavesMesh.geometry;
+  const fit = fitTreeHeight(branches, leaves, targetHeight);
+  branches.scale(fit, fit, fit);
+  leaves.scale(fit, fit, fit);
+  tree.growth = {
+    targetHeight,
+    naturalHeight,
+    fit,
+    trunkLength: growth.branch.length[0] * fit,
+    trunkRadius: growth.branch.radius[0] * fit,
+  };
 }

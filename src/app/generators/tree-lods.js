@@ -1,19 +1,26 @@
 import { Box3, Group, Mesh, Vector3 } from 'three';
+import { disposeObject } from '../environment/assets.js';
 import { applyAssetTriangleTargets } from './triangle-targets.js';
-import { adjustTreeGeometry, treeHeightAdjustment } from './tree-height.js';
+import { fitTreeHeight, growTree, validateTreeHeight } from './tree-height.js';
 
 export function createTreeLODAsset(tree, definition = {
   triangleTargets: tree.triangleTargets,
   targetHeight: tree.targetHeight,
-}, { forPreview = false } = {}) {
+}) {
+  const height = validateTreeHeight(definition.targetHeight);
   const geometry = [];
-  const dispose = () => geometry.splice(0).forEach((item) => item.dispose());
-  let fitted;
+  const dispose = () => geometry.splice(0).forEach(item => item.dispose());
+  let fitted, replacement;
   try {
+    // Exporters can supply a height independently of the live preview.
+    if (tree.growth?.targetHeight !== height) {
+      replacement = new tree.constructor();
+      replacement.options = tree.options;
+      growTree(replacement, height);
+    }
+    const source = replacement ?? tree;
     const lods = tree.constructor.defaultLODLevels.map(({ detail }, level) => {
-      const { branches, leaves } = tree.createGeometry(detail ?? {}, {
-        leafAnchors: forPreview || definition.targetHeight !== undefined,
-      });
+      const { branches, leaves } = source.createGeometry(detail);
       geometry.push(branches, leaves);
       const group = new Group();
       group.name = `lod${level}`;
@@ -24,36 +31,34 @@ export function createTreeLODAsset(tree, definition = {
       foliage.name = 'Leaves';
       foliage.userData.wind = true;
       group.add(bark, foliage);
-      if (tree.trellisMesh) {
-        const trellis = tree.trellisMesh.clone(true);
-        trellis.scale.y = 1;
-        group.add(trellis);
-      }
+      if (tree.trellisMesh) group.add(tree.trellisMesh.clone(true));
       return group;
     });
     if (lods.length !== 3) throw new Error('Expected three default tree LOD definitions.');
     const asset = { lods, object3D: lods[0], definition, dispose };
-    // Trellis rails and end caps are already low-poly and retain their shape.
-    fitted = applyAssetTriangleTargets(asset, { fixed: (mesh) => mesh.parent.name === 'Trellis', strict: true });
-    if (!forPreview && definition.targetHeight !== undefined) {
-      const adjustment = treeHeightAdjustment(fitted.lods[0], definition.targetHeight);
-      const adjusted = new Set();
+    fitted = applyAssetTriangleTargets(asset, { fixed: mesh => mesh.parent.name === 'Trellis', strict: true });
+    if (height !== undefined) {
+      const [bark, foliage] = fitted.lods[0].children;
+      const fit = fitTreeHeight(bark.geometry, foliage.geometry, height);
+      const scaled = new Set();
       for (const lod of fitted.lods) {
-        const [bark, foliage, trellis] = lod.children;
-        for (const mesh of [bark, foliage]) {
-          if (adjusted.has(mesh.geometry)) continue;
-          adjustTreeGeometry(mesh.geometry, adjustment);
-          adjusted.add(mesh.geometry);
+        for (const mesh of lod.children.slice(0, 2)) {
+          if (scaled.has(mesh.geometry)) continue;
+          mesh.geometry.scale(fit, fit, fit);
+          scaled.add(mesh.geometry);
         }
-        if (trellis) trellis.scale.y = adjustment.woodScale;
         if (lod.userData.bounds) lod.userData.bounds = new Box3().setFromObject(lod).getSize(new Vector3()).toArray();
       }
-      fitted.heightAdjustment = adjustment;
+      const correction = fit / source.growth.fit;
+      fitted.trunkLength = source.growth.trunkLength * correction;
+      fitted.trunkRadius = source.growth.trunkRadius * correction;
     }
     return fitted;
   } catch (error) {
     if (fitted) fitted.dispose();
     else dispose();
     throw error;
+  } finally {
+    if (replacement) disposeObject(replacement);
   }
 }
