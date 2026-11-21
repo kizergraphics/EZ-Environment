@@ -1,8 +1,8 @@
 import * as THREE from 'three';
-import { PLANT_PRESETS, PLANT_ARCHETYPES, LEAF_DESIGNS, PLANT_BARK_TYPES, GRASS_CARD_LAYOUTS, createPlantDefinition } from '../generators/plants.js';
+import { PLANT_ARCHETYPES, LEAF_DESIGNS, PLANT_BARK_TYPES, GRASS_CARD_LAYOUTS, createPlantDefinition } from '../generators/plants.js';
 import { leafTextureInfo, leafTexturesForDesign, legacyLeafTexture } from '../generators/leaf-textures.js';
-import { ROCK_PRESETS, ROCK_ARCHETYPES, ROCK_SHAPE_PROFILES, createRockDefinition } from '../generators/rocks.js';
-import { PRESET_GROUPS, assetLayer, layerSpecies } from '../generators/catalog.js';
+import { ROCK_ARCHETYPES, ROCK_SHAPE_PROFILES, createRockDefinition } from '../generators/rocks.js';
+import { MEADOW_ASSET_PRESETS, RETIRED_SPECIES, assetLayer, layerSpecies } from '../generators/catalog.js';
 import { GenerationClient } from './generation.js';
 import { WindController } from '../environment/wind.js';
 import { makeAuthoredSpecies } from '../environment/species.js';
@@ -12,7 +12,7 @@ import { cleanTreeDefinition,prepareTreeProject,commitTreeProject } from './tree
 import { disposeObject } from '../environment/assets.js';
 import { prepareAssetMaterials } from '../materials/pbr.js';
 import { awaitTextureReadiness } from '../materials/readiness.js';
-import { MEADOW, applyMeadowPreset } from '../environment/biomes.js';
+import { MEADOW, applyMeadowPreset, migrateMeadowSpecies } from '../environment/biomes.js';
 import { terrainHeight } from '../environment/placement.js';
 import { validateCameras, validateCameraState, validateLastAuthoredMode, chooseGroundPosition } from './viewport.js';
 import { GrassCardEditor } from './grass-card-editor.js';
@@ -244,11 +244,12 @@ export class Studio {
     header.append(el('p','studio-description',this.mode==='plant'?'Shape living forms, from low ground cover to branching shrubs.':this.mode==='rock'?'Sculpt pebbles, stones, boulders, and natural clusters.':'Compose a seeded world with layered vegetation and stone.'));this.panel.append(header);
     const body=el('div','studio-scroll');this.panel.append(body);
     if(this.mode==='environment'){this.renderEnvironment(body);return;}
-    const mode=this.mode,d=this.definitions[mode],presets=mode==='plant'?PLANT_PRESETS:ROCK_PRESETS;
+    const mode = this.mode, d = this.definitions[mode];
+    const types = mode === 'plant' ? PLANT_ARCHETYPES : ROCK_ARCHETYPES;
+    const presets = MEADOW_ASSET_PRESETS.filter(preset => types.includes(preset.definition.archetype));
     const p=section('Starting point');body.append(p.element);
     const selected=presets.find(p=>JSON.stringify(p.definition)===JSON.stringify(d))?.id||'';
-    p.body.append(select('Preset',[['','Custom'],...PRESET_GROUPS.flatMap(g=>presets.filter(p=>p.group===g).map(p=>[p.id,p.name,g]))],selected,async id=>{if(!id)return;this.remember();this.definitions[mode]=this.grassEditor.withSavedLayouts(structuredClone(presets.find(p=>p.id===id).definition));this.renderPanel();await this.generate(true);}));
-    const types=mode==='plant'?PLANT_ARCHETYPES:ROCK_ARCHETYPES;
+    p.body.append(select('Preset',[['','Custom'],...presets.map(p => [p.id, p.name, 'Meadow'])],selected,async id=>{if(!id)return;this.remember();this.definitions[mode]=this.grassEditor.withSavedLayouts(structuredClone(presets.find(p=>p.id===id).definition));this.renderPanel();await this.generate(true);}));
     p.body.append(select('Form',types.map(t=>[t,title(t)]),d.archetype,async type=>{
       const overrides=type==='grass'?{cardLayout:GRASS_TWELVE_LAYOUT}:{};
       this.definitions[mode]=this.grassEditor.withSavedLayouts((mode==='plant'?createPlantDefinition:createRockDefinition)(type,overrides));
@@ -388,7 +389,6 @@ export class Studio {
     meadow.body.append(field('Keep tree alongside other assets',o.includeAuthoredTree,0,0,0,v=>this.envChange({includeAuthoredTree:v}),'checkbox'));
     const settings=section('Terrain');body.append(settings.element);
     settings.body.append(field('World radius · m',o.radius,16,256,8,v=>this.envChange({radius:v},{modified:false})));
-    settings.body.append(select('Landform',[['rolling','Rolling hills'],['dunes','Wind-shaped dunes'],['ridges','Rocky ridges']],o.terrain.form||'rolling',v=>this.envChange({terrain:{...this.environment.options.terrain,form:v}})));
     settings.body.append(field('Terrain height · m',o.terrain.amplitude,0,15,.5,v=>this.envChange({terrain:{...this.environment.options.terrain,amplitude:v}})));
     settings.body.append(field('Terrain wavelength · m',o.terrain.scale,8,150,1,v=>this.envChange({terrain:{...this.environment.options.terrain,scale:v}})));
     const terrainAdvanced=section('Advanced terrain',false);settings.body.append(terrainAdvanced.element);terrainAdvanced.body.append(field('Chunk size · m',o.chunkSize,16,96,8,v=>this.envChange({chunkSize:v},{modified:false})));
@@ -451,7 +451,7 @@ export class Studio {
     output.body.append(el('p','','Includes textured models, LODs, reusable texture files and a material catalog for Unity.'));
     output.body.append(action('Export environment pack',()=>this.runAssetExport(async options=>{
       this.status('Exporting trees, assets, and placement records…');
-      await exportScenePack(this.environment,[...(this.tree.visible?[this.tree]:[]),...(this.forest.visible?this.forest.children:[])],{...this.exportOptions,...options,treeColliders:true});
+      await exportScenePack(this.environment,this.tree.visible ? [this.tree] : [],{...this.exportOptions,...options,treeColliders:true});
       this.status('Environment pack exported.');
     }),'studio-button primary'));
     output.body.append(action('Cancel export',()=>this.exportController?.abort()));
@@ -547,21 +547,23 @@ export class Studio {
     if(!['tree','plant','rock','environment'].includes(data.mode||'environment'))throw new Error('Unknown saved editor mode.');
     const lastAuthoredMode=validateLastAuthoredMode(data.lastAuthoredMode,data.mode);
     const grassLayouts=validateGrassCardEdits(data.grassLayouts??this.grassEditor.saved);
-    const options=validateOptions(data.version===1?{...data.environment,composition:'legacy',includeAuthoredTree:true}:data.environment),plant=createPlantDefinition(data.plant.archetype,data.plant),rock=createRockDefinition(data.rock.archetype,data.rock),cameras=validateCameras(data.version===2?data.cameras:undefined);
+    const options = migrateMeadowSpecies(validateOptions(data.version === 1
+      ? { ...data.environment, composition: 'legacy', includeAuthoredTree: true }
+      : data.environment));
+    const plant=createPlantDefinition(data.plant.archetype,data.plant),rock=createRockDefinition(data.rock.archetype,data.rock),cameras=validateCameras(data.version===2?data.cameras:undefined);
     const preparedTree=data.tree?prepareTreeProject(data.tree,this.tree):null;
     const currentIds=new Set(this.environment.options.customSpecies.map(c=>c.id));
     const registry=new Map([...this.environment.registry].filter(([id])=>!currentIds.has(id))),created=[];
     try{
-      for(const c of options.customSpecies){if(registry.has(c.id))throw new Error('Custom species cannot replace a built-in species.');const a=await makeAuthoredSpecies(c.definition);registry.set(c.id,a);created.push(a);}
+      for(const c of options.customSpecies){if(registry.has(c.id)||RETIRED_SPECIES.has(c.id))throw new Error('Custom species cannot replace a built-in species.');const a=await makeAuthoredSpecies(c.definition);registry.set(c.id,a);created.push(a);}
       for(const l of Object.values(options.layers))for(const id of [l.species,...l.speciesChoices.map(c=>c.id)])if(!registry.has(id))throw new Error(`Unknown species: ${id}`);
       // Finish every asynchronous preparation before committing the live tree.
       for (const asset of created) await prepareAssetMaterials(asset);
       if (preparedTree) await awaitTextureReadiness(preparedTree);
-      if(options.composition==='legacy')await this.ensureLegacyForest?.();
       if(data.version===2){
         const authored=preparedTree||this.tree;
         if(preparedTree){authored.position.copy(this.tree.position);authored.quaternion.copy(this.tree.quaternion);authored.scale.copy(this.tree.scale);authored.updateMatrixWorld(true);}
-        const trees=options.composition==='legacy'?[authored,...this.forest.children]:options.includeAuthoredTree?[authored]:[];
+        const trees = options.includeAuthoredTree ? [authored] : [];
         options.treeExclusions=[...options.treeExclusions.filter(s=>s.source!=='scene-tree'),...trees.map(t=>({source:'scene-tree',type:'circle',x:t.position.x,z:t.position.z,radius:Math.max(1.5,t.options.branch.radius[0]*1.3)}))];
         options.canopySources=[...options.canopySources.filter(s=>s.source!=='scene-tree'),...trees.map(t=>{const size=new THREE.Box3().setFromObject(t).getSize(new THREE.Vector3());return{source:'scene-tree',x:t.position.x,z:t.position.z,radius:Math.max(2,size.x*.5,size.z*.5),strength:.9};})];
       }

@@ -1,4 +1,5 @@
 import { DEFAULT_OPTIONS, LAYERS, validateOptions } from './options.js';
+import { RETIRED_SPECIES } from '../generators/catalog.js';
 
 export const MEADOW = Object.freeze({
   name: 'Meadow',
@@ -23,6 +24,22 @@ export const MEADOW = Object.freeze({
     pebbles: { density: .014 },
   },
 });
+
+export function migrateMeadowSpecies(options) {
+  for (const key of LAYERS) {
+    const layer = options.layers[key];
+    const choices = layer.speciesChoices.filter(choice => !RETIRED_SPECIES.has(choice.id));
+    if (RETIRED_SPECIES.has(layer.species)) {
+      layer.species = MEADOW.layers[key].species ?? DEFAULT_OPTIONS.layers[key].species;
+      options.modified = true;
+    }
+    if (choices.length !== layer.speciesChoices.length) {
+      layer.speciesChoices = choices;
+      options.modified = true;
+    }
+  }
+  return options;
+}
 
 export function applyMeadowPreset(current) {
   const layers = Object.fromEntries(LAYERS.map(key => [key, {

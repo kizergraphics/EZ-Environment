@@ -62,10 +62,10 @@ try {
       const a = window.__EZ_ENVIRONMENT__, e = a.environment, renderer = a.renderer;
       await e.setOptions({ seed: protocol.seed, quality });
       const optionsBefore = structuredClone(e.options), placementHashBefore = e.placement.hash;
-      const original = { render: renderer.render, treeVisible: a.tree.visible, forestVisible: a.forest.visible, groundVisible: e.ground.visible, skyMaterialVisible: e.skybox.material.visible, skyVisible: e.skybox.visible, previewVisible: a.studio.previewRig.visible, viewportVisible: a.studio.viewportGroup.visible, cameraPosition: a.camera.position.clone(), cameraTarget: a.controls.target.clone() };
+      const original = { render: renderer.render, treeVisible: a.tree.visible, groundVisible: e.ground.visible, skyMaterialVisible: e.skybox.material.visible, skyVisible: e.skybox.visible, previewVisible: a.studio.previewRig.visible, viewportVisible: a.studio.viewportGroup.visible, cameraPosition: a.camera.position.clone(), cameraTarget: a.controls.target.clone() };
       const gl = renderer.getContext(), ext = gl.getExtension('EXT_disjoint_timer_query_webgl2');
       if (!ext) return { index, quality, optionsBefore, supported: false, reason: 'EXT_disjoint_timer_query_webgl2 unavailable', gates: { gpuBudget: false, measurementValid: false } };
-      a.tree.visible = false; a.forest.visible = false; e.ground.visible = false;
+      a.tree.visible = false; e.ground.visible = false;
       // Skybox is a Mesh AND the parent of the sun/ambient lights. Its parent
       // visibility must remain true so we exclude pixels without changing light.
       e.skybox.visible = true; e.skybox.material.visible = false;
@@ -160,7 +160,7 @@ try {
         measuring = false; row = null; renderer.render = original.render;
         for (const [object, key, saved] of hooks) object[key] = saved;
         for (const item of pending.splice(0)) { item.row.status = 'phase-aborted'; counters.abortedQueries++; gl.deleteQuery(item.query); }
-        a.tree.visible = original.treeVisible; a.forest.visible = original.forestVisible; e.ground.visible = original.groundVisible;
+        a.tree.visible = original.treeVisible; e.ground.visible = original.groundVisible;
         e.skybox.material.visible = original.skyMaterialVisible; e.skybox.visible = original.skyVisible;
         a.studio.previewRig.visible = original.previewVisible; a.studio.viewportGroup.visible = original.viewportVisible;
         a.camera.position.copy(original.cameraPosition); a.controls.target.copy(original.cameraTarget); a.controls.update();

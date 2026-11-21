@@ -35,7 +35,7 @@ test('saved Forest, Desert, Rocky, and Woodland projects open as modified Meadow
     assert.equal(migrated.biome, 'meadow');
     assert.equal(migrated.modified, true);
     assert.equal(migrated.seed, 19);
-    assert.deepEqual(migrated.terrain, { form: 'ridges', amplitude: 9, scale: 48 });
+    assert.deepEqual(migrated.terrain, { form: 'rolling', amplitude: 9, scale: 48 });
     assert.equal(migrated.lighting.sky, '#123456');
     assert.equal(migrated.layers.grass.species, 'grass_clump');
     assert.equal(migrated.layers.grass.density, .1);
@@ -102,11 +102,11 @@ test('Meadow placements and tree transforms are independent of appearance and qu
     }
 });
 
-test('rendered rolling hills, dunes, and ridges match analytic placement heights', () => {
+test('rendered Meadow hills match analytic placement heights at different elevations', () => {
   const surfaces=[];
-  for(const form of ['rolling','dunes','ridges']){
+  for(const amplitude of [2,5,9]){
     const options=applyMeadowPreset(validateOptions({radius:32}));
-    options.terrain.form=form;
+    options.terrain.amplitude=amplitude;
     const geometry=createTerrainGeometry(options);
     const material=new MeshBasicMaterial({side:DoubleSide}),mesh=new Mesh(geometry,material);mesh.updateMatrixWorld(true);
     const position=geometry.attributes.position,detailUV=geometry.attributes.uv;
@@ -117,7 +117,7 @@ test('rendered rolling hills, dunes, and ridges match analytic placement heights
     for(const [x,z]of [[-21.3,7.4],[1.37,2.41],[11.11,-9.81],[18.41,17.81],[-4.1,-24.8]]){
       ray.set(new Vector3(x,100,z),new Vector3(0,-1,0));const hit=ray.intersectObject(mesh)[0];assert.ok(hit);
       const y=terrainHeight(x,z,options);heights.push(y);
-      assert.ok(Math.abs(hit.point.y-(y-.015))<.08,`${form} render/placement mismatch at ${x}, ${z}`);
+      assert.ok(Math.abs(hit.point.y-(y-.015))<.08,`${amplitude} render/placement mismatch at ${x}, ${z}`);
       assert.ok(Math.abs(Math.hypot(...terrainNormal(x,z,options))-1)<1e-12);
     }
     surfaces.push(heights);geometry.dispose();material.dispose();

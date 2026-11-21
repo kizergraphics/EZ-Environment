@@ -1,11 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
-import { ASSET_PRESETS, assetLayer, layerSpecies } from '../src/app/generators/catalog.js';
+import { ASSET_PRESETS, MEADOW_ASSET_PRESETS, assetLayer, layerSpecies } from '../src/app/generators/catalog.js';
 import { PLANT_PRESETS, createPlantDefinition, generatePlant } from '../src/app/generators/plants.js';
 import { ROCK_PRESETS, createRockDefinition, generateRock } from '../src/app/generators/rocks.js';
 import { makeSpecies, createRegistry } from '../src/app/environment/species.js';
-import { applyMeadowPreset } from '../src/app/environment/biomes.js';
+import { applyMeadowPreset, migrateMeadowSpecies } from '../src/app/environment/biomes.js';
 import { validateOptions } from '../src/app/environment/options.js';
 
 test('catalog IDs, layers and biome mixtures resolve to regenerable built-ins',async()=>{
@@ -16,11 +16,35 @@ test('catalog IDs, layers and biome mixtures resolve to regenerable built-ins',a
   }
   const registry=await createRegistry([],null,false);
   try{
-    for(const p of ASSET_PRESETS){assert.equal(assetLayer(p.definition),p.layer);assert.ok(registry.has(p.id));assert.ok(layerSpecies(p.layer).some(s=>s.id===p.id));assert.deepEqual(registry.get(p.id).definition,p.definition);}
+    for(const p of ASSET_PRESETS){
+      assert.equal(assetLayer(p.definition),p.layer);
+      const available = MEADOW_ASSET_PRESETS.includes(p);
+      assert.equal(registry.has(p.id),available,p.id);
+      assert.equal(layerSpecies(p.layer).some(s=>s.id===p.id),available,p.id);
+      if (available) assert.deepEqual(registry.get(p.id).definition,p.definition);
+    }
     for(const [layer,options]of Object.entries(applyMeadowPreset(validateOptions()).layers)){
       for(const s of options.speciesChoices)assert.ok(layerSpecies(layer).some(p=>p.id===s.id),`Meadow/${layer}/${s.id}`);
     }
   }finally{registry.forEach(a=>a.dispose());}
+});
+
+test('legacy biome species migrate to Meadow defaults while custom and Meadow choices survive', () => {
+  const options = validateOptions({ biome: 'desert', composition: 'biome', layers: {
+    plants: { species: 'sagebrush', density: .123, speciesChoices: [
+      { id: 'cactus', weight: 2 }, { id: 'custom-fern', weight: 5 },
+    ] },
+    boulders: { species: 'sandstone_outcrop', speciesChoices: [{ id: 'mossy-forest-boulder', weight: 1 }] },
+    rocks: { species: 'low-fieldstone' },
+  }, customSpecies: [{ id: 'custom-fern', definition: createPlantDefinition('fern') }] });
+  migrateMeadowSpecies(options);
+  assert.equal(options.biome, 'meadow');
+  assert.equal(options.layers.plants.species, 'bush');
+  assert.equal(options.layers.plants.density, .123);
+  assert.deepEqual(options.layers.plants.speciesChoices, [{ id: 'custom-fern', weight: 5 }]);
+  assert.equal(options.layers.boulders.species, 'boulder');
+  assert.deepEqual(options.layers.boulders.speciesChoices, []);
+  assert.equal(options.layers.rocks.species, 'low-fieldstone');
 });
 
 test('authored grass and cactus definitions survive scatter reconstruction and layer routing',()=>{

@@ -39,6 +39,8 @@ try{
   await record('Initialized environment workspace',await page.evaluate(()=>({mode:window.__EZ_ENVIRONMENT__.mode,biome:window.__EZ_ENVIRONMENT__.environment.options.biome})));
 
   assert.equal(await page.locator('.biome-card').count(), 0);
+  assert.equal(await page.getByLabel('Landform', { exact: true }).count(), 0);
+  assert.equal(await page.locator('select[aria-label="Species"] option[value="desert_pebble"]').count(), 0);
   assert.equal(await page.locator('#studio-panel').getByText('Meadow', { exact: true }).count(), 1);
   assert.equal(await page.getByRole('button', { name: 'Reset preset', exact: true }).count(), 1);
   await record('Environment exposes one Meadow preset with a reset action');
@@ -127,8 +129,8 @@ try{
       console.log(`CASE ${biome} ${appearance}`);
       await page.evaluate(async({biome,appearance})=>{const s=window.__EZ_ENVIRONMENT__.studio;await s.resetMeadowPreset();await s.envChange({appearance,quality:'medium'},{modified:false});s.cameraPreset('overview');},{biome,appearance});
       await ready();await frame();
-      const result=await page.evaluate(()=>{const a=window.__EZ_ENVIRONMENT__,e=a.environment;return{biome:e.options.biome,appearance:e.options.appearance,hash:e.placement.hash,count:e.placement.count,trees:e.grove.records?.length??null,groveTransforms:e.grove.records??null,heroVisible:a.tree.visible,legacyForestVisible:a.forest.visible,resources:{...a.renderer.info.memory}};});
-      assert.equal(result.biome,biome);assert.equal(result.appearance,appearance);assert.equal(result.heroVisible,false);assert.equal(result.legacyForestVisible,false);
+      const result=await page.evaluate(()=>{const a=window.__EZ_ENVIRONMENT__,e=a.environment;return{biome:e.options.biome,appearance:e.options.appearance,hash:e.placement.hash,count:e.placement.count,trees:e.grove.records?.length??null,groveTransforms:e.grove.records??null,heroVisible:a.tree.visible,resources:{...a.renderer.info.memory}};});
+      assert.equal(result.biome,biome);assert.equal(result.appearance,appearance);assert.equal(result.heroVisible,false);
       if(referenceHash===null){referenceHash=result.hash;referenceTrees=result.groveTransforms;}else{assert.equal(result.hash,referenceHash);assert.deepEqual(result.groveTransforms,referenceTrees);}
       const overview=await capture('1080p',path.join(output,`${biome}-${appearance}-overview.png`));report.screenshots.push(overview);
       await page.evaluate(()=>window.__EZ_ENVIRONMENT__.studio.cameraPreset('ground'));await frame();
@@ -203,10 +205,10 @@ try{
     const project=structuredClone(s.project());project.version=1;delete project.cameras;
     project.environment={biome:'woodland',terrain:{amplitude:2},layers:{grass:{density:.123}}};
     await s.loadProject(project);
-    const result={composition:a.environment.options.composition,density:a.environment.options.layers.grass.density,biome:a.environment.options.biome,amplitude:a.environment.options.terrain.amplitude};
+    const result={composition:a.environment.options.composition,density:a.environment.options.layers.grass.density,biome:a.environment.options.biome,amplitude:a.environment.options.terrain.amplitude,hasForestBackdrop:!!a.scene.getObjectByName('Forest')};
     await s.resetMeadowPreset();return result;
   });
-  assert.deepEqual(legacy,{composition:'legacy',density:.123,biome:'meadow',amplitude:2});
+  assert.deepEqual(legacy,{composition:'legacy',density:.123,biome:'meadow',amplitude:2,hasForestBackdrop:false});
   await record('Version 1 project retains legacy terrain and layer settings until preset upgrade');
 
   const migrated = await page.evaluate(async () => {
@@ -217,17 +219,20 @@ try{
       const project = structuredClone(saved);
       Object.assign(project.environment, { biome, seed: 23, radius: 24, terrain: { form: 'ridges', amplitude: 2, scale: 30 } });
       project.environment.layers.grass.density = .123;
+      project.environment.layers.plants.species = 'sagebrush';
+      project.environment.layers.plants.speciesChoices = [{ id: 'heather-cushion', weight: 1 }];
+
       await studio.loadProject(project);
       const current = environment.options;
       results.push({ biome: current.biome, modified: current.modified, seed: current.seed,
-        terrain: current.terrain, grass: current.layers.grass.density,
+        terrain: current.terrain, grass: current.layers.grass.density, plants: current.layers.plants.species, plantMix: current.layers.plants.speciesChoices, hasForestBackdrop: !!studio.scene.getObjectByName('Forest'),
         texture: new URL(environment.ground.material.map.image.src).pathname });
     }
     return results;
   });
   for (const result of migrated) {
     assert.deepEqual(result, { biome: 'meadow', modified: true, seed: 23,
-      terrain: { form: 'ridges', amplitude: 2, scale: 30 }, grass: .123,
+      terrain: { form: 'rolling', amplitude: 2, scale: 30 }, grass: .123, plants: 'bush', plantMix: [], hasForestBackdrop: false,
       texture: '/textures/biomes/meadow-soil/color-1024.jpg' });
   }
   await page.getByRole('button', { name: 'Reset preset', exact: true }).click();

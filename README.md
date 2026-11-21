@@ -28,8 +28,8 @@ Create game-ready natural assets without leaving your desktop. EZ Environment is
 ## What you can make
 
 - **Procedural trees** — start from ash, aspen, oak, pine, bush, and trellis presets, then shape the trunk, branches, leaves, bark, wind, and level of detail.
-- **Plants and ground cover** — author shrubs, saplings, ferns, weeds, flowers, grasses, cacti, succulents, cushions, young conifers, and deadwood from a 30-preset catalog.
-- **Rocks and formations** — create pebbles, fieldstones, boulders, slabs, clusters, and connected outcrops from 22 presets with editable silhouettes and surface treatments.
+- **Plants and ground cover** — author shrubs, saplings, ferns, weeds, flowers, grasses, cacti, succulents, cushions, young conifers, and deadwood with 10 starting presets in the Meadow catalog.
+- **Rocks and formations** — create pebbles, fieldstones, boulders, slabs, clusters, and connected outcrops from 12 starting presets with editable silhouettes and surface treatments.
 - **Meadow environments** — compose seeded grassland scenes with deterministic terrain, vegetation, stones, lighting, fog, wind, and density controls.
 
 Everything is seed-driven, so a useful result can be reproduced, adjusted, saved as a project, or regenerated as a variation.
@@ -55,7 +55,7 @@ The individual studios share the same live 3D workspace. Move between asset desi
 
 ## Meadow environment
 
-Meadow is the Environment preset. Adjust the world seed, terrain profile, scatter layers, lighting, fog, and wind, or use **Reset preset** to restore Meadow settings. Older projects open under Meadow with their saved environment controls and authored assets.
+Meadow is the environment preset. Adjust the seed, terrain height and wavelength, scatter layers, lighting, fog, and wind. **Reset preset** restores Meadow settings. Older projects keep their authored assets and use rolling hills and Meadow species in place of retired biome-specific settings.
 
 ## Materials and detail
 

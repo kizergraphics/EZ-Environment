@@ -1,5 +1,7 @@
 # Vegetation and rock catalog expansion
 
+This document records the original preset expansion. The current Plant and Rock menus show Meadow presets. Older authored definitions can still open.
+
 The catalog now contains **30 Plant presets and 22 Rock presets**. Bush 1, Bush 2, and Bush 3 have Plant-native replacements; their legacy Tree definitions remain loadable for compatibility but no longer appear in the Tree editor.
 
 ## Using the additions

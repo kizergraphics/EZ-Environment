@@ -47,7 +47,12 @@ export function validateOptions(input = {}) {
   for(const key of ['sky','horizon','fog','sun'])if(!/^#[0-9a-f]{6}$/i.test(o.lighting[key]))throw new Error(`Invalid lighting ${key}.`);
   for(const [key,min,max] of [['fogDensity',0,.03],['elevation',5,85],['intensity',0,8],['ambient',0,4],['exposure',.2,2]])number(o.lighting[key],`Lighting ${key}`,min,max);
   o.terrain = { ...DEFAULT_OPTIONS.terrain, ...o.terrain };
-  if(o.terrain.form!==undefined&&!['rolling','dunes','ridges'].includes(o.terrain.form))throw new Error('Unknown terrain form.');
+  if (o.terrain.form === 'dunes' || o.terrain.form === 'ridges') {
+    o.terrain.form = 'rolling';
+    o.modified = true;
+  } else if (o.terrain.form !== undefined && o.terrain.form !== 'rolling') {
+    throw new Error('Unknown terrain form.');
+  }
   number(o.terrain.amplitude, 'Terrain height', 0, 15); number(o.terrain.scale, 'Terrain scale', 8, 150);
   o.wind = { ...DEFAULT_OPTIONS.wind, ...o.wind };
   number(o.wind.strength, 'Wind strength', 0, 2); number(o.wind.frequency, 'Wind frequency', 0, 5);

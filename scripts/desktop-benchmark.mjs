@@ -325,7 +325,7 @@ try {
     if (gpuComponentOnly) report.scope = 'Environment component only: hero tree and scenic forest hidden; environment content, terrain, sky, lights, fog, and shadow policy retained. Full circular replay with direct GPU queries; no on/off subtraction and not full-scene timing.';
     for (const mode of gpuComponentOnly ? ['environment'] : ['tree', 'plant', 'rock', 'environment']) {
       await page.evaluate(mode => window.__EZ_ENVIRONMENT__.studio.setMode(mode), mode);
-      if (gpuComponentOnly) await page.evaluate(() => { const a = window.__EZ_ENVIRONMENT__; a.tree.visible = false; a.forest.visible = false; });
+      if (gpuComponentOnly) await page.evaluate(() => { const a = window.__EZ_ENVIRONMENT__; a.tree.visible = false; });
       const qualities = mode === 'environment' ? (gpuComponentOnly ? ['medium', 'high'] : ['low', 'medium', 'high']) : ['medium'];
       for (const quality of qualities) {
         if (mode === 'environment') await page.evaluate(q => window.__EZ_ENVIRONMENT__.environment.setOptions({ quality: q }), quality);

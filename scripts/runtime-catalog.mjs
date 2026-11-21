@@ -14,11 +14,11 @@ try{
     window.catalogModuleUrls={three:plants.match(/import \* as THREE from "([^"]+)"/)[1],loader:assets.match(/import \{ GLTFLoader \} from "([^"]+)"/)[1]};
   });
   await page.evaluate(async()=>{const s=window.__EZ_ENVIRONMENT__.studio;await s.envChange({radius:24,quality:'medium'});});
-  const inventory=await page.evaluate(async()=>{const {ASSET_PRESETS}=await import('/generators/catalog.js');return ASSET_PRESETS.map(p=>({id:p.id,layer:p.layer,form:p.definition.archetype}));});
-  for(const [mode,expected]of [['plant',30],['rock',22]]){
+  const inventory=await page.evaluate(async()=>{const {MEADOW_ASSET_PRESETS}=await import('/generators/catalog.js');return MEADOW_ASSET_PRESETS.map(p=>({id:p.id,layer:p.layer,form:p.definition.archetype}));});
+  for(const [mode,expected]of [['plant',10],['rock',12]]){
     await page.locator(`[data-mode="${mode}"]`).click();
     assert.equal(await page.locator('#studio-panel select[aria-label="Preset"] option').count(),expected+1);
-    assert.ok(await page.locator('#studio-panel select[aria-label="Preset"] optgroup').count()>=4);
+    assert.deepEqual(await page.locator('#studio-panel select[aria-label="Preset"] optgroup').evaluateAll(groups => groups.map(group => group.label)), ['Meadow']);
     const ids=inventory.filter(p=>mode==='plant'?['plants','grass','flowers'].includes(p.layer):['rocks','boulders','pebbles'].includes(p.layer));
     for(const {id}of ids){
       await page.getByLabel('Preset',{exact:true}).last().selectOption(id);
@@ -29,7 +29,7 @@ try{
     }
     record(`${mode}: all ${expected} grouped presets generate and reduce LODs`);
   }
-  for(const [mode,id,key,value]of [['plant','tall-seed-grass','height',1.8],['plant','saguaro-cactus','armCount',4],['rock','sandstone-outcrop','strata',.6]]){
+  for(const [mode,id,key,value]of [['plant','tall-seed-grass','height',1.8],['plant','meadow-bush','height',1.4],['rock','low-fieldstone','strata',.6]]){
     await page.locator(`[data-mode="${mode}"]`).click();await page.getByLabel('Preset',{exact:true}).last().selectOption(id);await page.waitForFunction(()=>!window.__EZ_ENVIRONMENT__.studio.pending);
     const result=await page.evaluate(async({key,value})=>{const s=window.__EZ_ENVIRONMENT__.studio;s.change(key,value);await s.ensureAsset();return{hash:s.asset.definitionHash,definition:s.asset.definition};},{key,value});
     await page.getByRole('button',{name:'Add to environment',exact:true}).click();

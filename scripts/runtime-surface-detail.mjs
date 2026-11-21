@@ -75,7 +75,7 @@ try {
       await studio.generate(true);studio.renderPanel();studio.fit();
       // Isolate the authored surface for QA, retaining the editor's lights and
       // renderer. This changes only this disposable browser session.
-      app.environment.visible=true;app.environment.content.visible=false;app.environment.grove.root.visible=false;app.tree.visible=false;if(app.forest)app.forest.visible=false;
+      app.environment.visible=true;app.environment.content.visible=false;app.environment.grove.root.visible=false;app.tree.visible=false;
       const sample=[];
       studio.asset.lods[0].traverse(mesh=>{if(!mesh.isMesh||!mesh.geometry.attributes.position.count)return;
         const m=mesh.material,image=m.map.image,canvas=document.createElement('canvas');canvas.width=canvas.height=128;

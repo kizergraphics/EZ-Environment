@@ -30,8 +30,6 @@ export function terrainHeight(x, z, o) {
   if(o.composition==='biome'){
     const broad=(biomeNoise(x/s,z/s,o.seed)*.75+biomeNoise(x/(s*.6),z/(s*.6),o.seed^71)*.25-.5)*2;
     const fine=(biomeNoise(x/(s*.35),z/(s*.35),o.seed^1987)-.5)*.32;
-    if(o.terrain.form==='dunes')return falloff*o.terrain.amplitude*(Math.sin((x*.85+z*.3)/s*3+Math.sin(z/s)*1.5)*.6+broad*.4+fine*.1);
-    if(o.terrain.form==='ridges')return falloff*o.terrain.amplitude*(1-Math.abs(broad)*2+fine);
     return falloff*o.terrain.amplitude*(broad+fine);
   }
   return falloff * o.terrain.amplitude * (Math.sin(x / s) * Math.cos(z / s) + 0.3 * Math.sin((x + z) / (s * 0.5)));

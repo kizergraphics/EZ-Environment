@@ -230,7 +230,7 @@ try{
     const flower=structuredClone(flowerChunk.layers.flowers.records[0]);flower.species='flower_white';flower.position[0]+=.5;flowerChunk.layers.flowers.records.push(flower);
     placement.hash=hash([...placement.chunks.values()]);
     const fixture={...source,placement,loading:false,exportObjects:[{id:'hero-tree',object:app.tree}]};
-    const result=await exportScenePack(fixture,[app.tree,...app.forest.children],{name:'unity-fixture',treeColliders:true});
+    const result=await exportScenePack(fixture,[app.tree],{name:'unity-fixture',treeColliders:true});
     return{assets:result.manifest.assets.map(asset=>asset.id),chunks:result.manifest.chunks.length,instances:result.manifest.chunks.reduce((sum,chunk)=>sum+chunk.count,0),staticObjects:result.manifest.staticObjects};
   });
   const fixturePath=path.join(output,'unity-fixture.zip');await(await fixtureDownload).saveAs(fixturePath);

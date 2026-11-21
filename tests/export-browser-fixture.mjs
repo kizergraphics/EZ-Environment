@@ -77,7 +77,7 @@ try {
     const fixture = { ...source, placement, loading: false, exportObjects: [] };
     const result = await exportScenePack(
       fixture,
-      [app.tree, ...app.forest.children],
+      [app.tree],
       { name: 'scene-fixture', treeColliders: true },
     );
     return {

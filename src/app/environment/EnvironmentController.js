@@ -9,6 +9,8 @@ import { LodController, lodVisibilityMask } from './lod.js';
 import { createTerrainGeometry } from './terrain.js';
 import { BiomeMaterials, disposeTerrainGround } from './materials.js';
 import { BiomeGrove } from './grove.js';
+import { migrateMeadowSpecies } from './biomes.js';
+import { RETIRED_SPECIES } from '../generators/catalog.js';
 import { biomeTreeRecords,withBiomeSources } from './biome-placement.js';
 import { addFoliageVariants, selectAssetAppearance } from './biome-species.js';
 import { prepareAssetMaterials } from '../materials/pbr.js';
@@ -19,7 +21,7 @@ import { ROCK_PRESETS, rockVariantIndex, selectRockVariant } from '../generators
 export class EnvironmentController extends THREE.Group {
   constructor(options = {}) {
     super(); this.name = 'Environment'; this.object3D = this;
-    this.options = validateOptions(options); this.ready = false; this.loading = false; this.error = null;
+    this.options = migrateMeadowSpecies(validateOptions(options)); this.ready = false; this.loading = false; this.error = null;
     this.cache = new EnvironmentAssetCache(); this.wind = new WindController(this.options.wind);
     this.lod = new LodController(this.options.chunkSize);
     this.batches = new Map(); this.registry = new Map(); this._generation = 0; this._disposed = false;
@@ -64,7 +66,7 @@ export class EnvironmentController extends THREE.Group {
     return this._initializing;
   }
   async setOptions(patch) {
-    const next = validateOptions({...this.options,...patch,layers:{...this.options.layers,...patch.layers}});
+    const next = migrateMeadowSpecies(validateOptions({...this.options,...patch,layers:{...this.options.layers,...patch.layers}}));
     if(this.registry.size)for(const layer of Object.values(next.layers))for(const id of [layer.species,...layer.speciesChoices.map(c=>c.id)])if(!this.registry.has(id))throw new Error(`Unknown species: ${id}`);
     const previous=this.options;
     this.options = next;
@@ -190,7 +192,7 @@ export class EnvironmentController extends THREE.Group {
   }
   applyStoneMaterials(maps,options){
     if (!maps?.stone) return;
-    for(const id of ['rock','boulder','pebble','sandstone','sandstone_outcrop','desert_pebble','rock_outcrop',...ROCK_PRESETS.map(p=>p.id)]){
+    for(const id of ['rock','boulder','pebble',...ROCK_PRESETS.map(p=>p.id)]){
       const asset=this.registry.get(id);if(!asset)continue;
       for(const lod of asset.lods)for(const {material} of collectMeshes(lod)){
         const all=[material,...[...(this.lod.sources.get(material)?.levels.values()||[])].map(b=>b.material)];
@@ -223,7 +225,7 @@ export class EnvironmentController extends THREE.Group {
     }
   }
   async addSpecies(id,asset,layer){
-    if(this.registry.has(id))throw new Error('Species already exists.');
+    if(this.registry.has(id)||RETIRED_SPECIES.has(id))throw new Error('Species already exists.');
     try { await prepareAssetMaterials(asset); } catch (error) { asset.dispose(); throw error; }
     this.registry.set(id,asset);
     try{await this.setOptions({customSpecies:[...this.options.customSpecies,{id,definition:structuredClone(asset.definition)}],layers:{[layer]:{...this.options.layers[layer],species:id,speciesChoices:[]}}});}

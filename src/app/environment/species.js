@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { generatePlant, createPlantDefinition } from '../generators/plants.js';
 import { generateRock, createRockDefinition, ROCK_ARCHETYPES } from '../generators/rocks.js';
-import { ASSET_PRESETS } from '../generators/catalog.js';
+import { MEADOW_ASSET_PRESETS, RETIRED_SPECIES } from '../generators/catalog.js';
 import { disposeObject } from './assets.js';
 import { extraSpecies } from './biome-species.js';
 import { applyAssetTriangleTargets, triangleSimplifierReady } from '../generators/triangle-targets.js';
@@ -77,8 +77,7 @@ export async function createRegistry(custom, cache, useModels = true) {
     registry.set(kind,makeSpecies(kind,definition));
   }
   for(const variant of ['short','tall','clump'])registry.set(`grass_${variant}`,createGrass(variant));
-  for(const kind of ['dry_shrub','cactus','fallen_log','sandstone','sandstone_outcrop','desert_pebble','rock_outcrop'])registry.set(kind,makeSpecies(kind));
-  for(const preset of ASSET_PRESETS)registry.set(preset.id,makeSpecies(preset.definition.archetype,preset.definition));
+  for(const preset of MEADOW_ASSET_PRESETS)registry.set(preset.id,makeSpecies(preset.definition.archetype,preset.definition));
   if (useModels) {
     for (const name of ['white','blue','yellow']) {
       const source = await cache.load(`/models/flower_${name}.glb`);
@@ -93,7 +92,7 @@ export async function createRegistry(custom, cache, useModels = true) {
     }
   }
   for (const entry of custom) {
-    if (!/^[a-zA-Z0-9_-]{1,80}$/.test(entry.id) || registry.has(entry.id)) throw new Error('Custom species must have a unique safe ID.');
+    if (!/^[a-zA-Z0-9_-]{1,80}$/.test(entry.id) || registry.has(entry.id) || RETIRED_SPECIES.has(entry.id)) throw new Error('Custom species must have a unique safe ID.');
     registry.set(entry.id,await makeAuthoredSpecies(entry.definition));
   }
   return registry;

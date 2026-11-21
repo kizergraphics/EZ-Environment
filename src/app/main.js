@@ -16,7 +16,7 @@ async function start(){
   renderer.outputColorSpace=THREE.SRGBColorSpace;
   container.appendChild(renderer.domElement);
   const [context]=await Promise.all([createScene(renderer),triangleSimplifierReady]);
-  const {scene,environment,tree,forest,camera,controls}=context;
+  const {scene,environment,tree,camera,controls}=context;
   let studio;
   const renderPipeline=createRenderPipeline({...context,renderer,container,getMode:()=>studio?.mode});
   const {render,syncSceneAppearance,capturePNG}=renderPipeline;
@@ -31,7 +31,6 @@ async function start(){
     const now=performance.now(),t=(now-animationStart)/1000;timings[timingIndex++%timings.length]=now-lastFrame;lastFrame=now;
     if(environment.visible)environment.update(t,camera);
     if(tree.visible)updateTreeWind(tree,environment.wind,camera,t);
-    if(forest.visible)for(const o of forest.children)if(o.visible)updateTreeWind(o,environment.wind,camera,t);
     studio.update(t);controls.update();render();frames++;
     if(now-lastHUD>500){if(hud)hud.textContent=`${Math.round(frames*1000/(now-lastHUD))} FPS  ·  ${renderer.info.render.calls} draws  ·  ${Math.round(renderer.info.render.triangles/1000)}k triangles`;frames=0;lastHUD=now;}
     requestAnimationFrame(animate);

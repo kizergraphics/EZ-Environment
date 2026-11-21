@@ -195,7 +195,7 @@ try {
     console.log('PASS portable grass revision 2: all four layouts and three LODs');
   }
   if(process.env.EZ_PORTABLE_WOOD_ONLY==='1'){
-    await page.locator('#studio-panel select[aria-label="Preset"]').selectOption('fallen-log');
+    await page.locator('#studio-panel select[aria-label="Form"]').selectOption('deadwood');
     await page.waitForFunction(()=>!window.__EZ_ENVIRONMENT__.studio.pending&&window.__EZ_ENVIRONMENT__.studio.asset.definition.archetype==='deadwood');
     await page.screenshot({path:path.join(output,'portable-wood.png')});
   }
@@ -251,10 +251,11 @@ try {
   await downloads.detach();
   const biomes=[];
   const catalog=[];
-  for(const [mode,expected,ids]of [['plant',30,['bush-1','bush-2','bush-3','moss-cushion','young-pine','fallen-log','short-meadow-grass','tall-seed-grass','saguaro-cactus','agave-rosette']],['rock',22,['limestone-slab','mossy-forest-boulder','talus-scree','sandstone-outcrop']]]){
+  for(const [mode,expected,ids]of [['plant',10,['meadow-bush','short-meadow-grass','tall-seed-grass','clover-groundcover']],['rock',12,['low-fieldstone','glacial-erratic','river-stone-bed']]]){
     if(process.env.EZ_PORTABLE_SURFACE_ONLY==='1')break;
     await page.evaluate(mode=>window.__EZ_ENVIRONMENT__.studio.setMode(mode),mode);
     const selector=page.locator('#studio-panel select[aria-label="Preset"]');assert.equal(await selector.locator('option').count(),expected+1);
+    assert.deepEqual(await selector.locator('optgroup').evaluateAll(groups => groups.map(group => group.label)), ['Meadow']);
     for(const id of ids){
       const preset=(mode==='plant'?PLANT_PRESETS:ROCK_PRESETS).find(preset=>preset.id===id);
       const definition=structuredClone(preset.definition);
@@ -271,6 +272,8 @@ try {
   await page.evaluate(()=>window.__EZ_ENVIRONMENT__.studio.setMode('tree'));
   await page.evaluate(()=>window.__EZ_ENVIRONMENT__.studio.setMode('environment'));
   assert.equal(await page.locator('.biome-card').count(), 0);
+  assert.equal(await page.getByLabel('Landform', { exact: true }).count(), 0);
+  assert.equal(await page.locator('select[aria-label="Species"] option[value="desert_pebble"]').count(), 0);
   assert.equal(await page.locator('#studio-panel').getByText('Meadow', { exact: true }).count(), 1);
   assert.equal(await page.getByRole('button', { name: 'Reset preset', exact: true }).count(), 1);
   const biome = 'meadow';
