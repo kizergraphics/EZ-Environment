@@ -297,11 +297,30 @@ try {
   assert.equal(await page.getByRole('button', { name: 'Reset preset', exact: true }).count(), 1);
   const biome = 'meadow';
   for(const appearance of process.env.EZ_PORTABLE_SURFACE_ONLY==='1'?[]:['naturalistic','photorealistic']){
-    const result=await page.evaluate(async({biome,appearance})=>{
-      const a=window.__EZ_ENVIRONMENT__,s=a.studio;await s.resetMeadowPreset();await s.envChange({appearance},{modified:false});s.cameraPreset('ground');a.render();
-      return{biome:a.environment.options.biome,appearance:a.environment.options.appearance,hash:a.environment.placement.hash,ready:a.environment.ready&&!a.environment.loading,draws:a.renderPipeline.lastDraw.calls};
-    },{biome,appearance});
-    assert.equal(result.biome,biome);assert.equal(result.appearance,appearance);assert.ok(result.ready&&result.draws>0);
+    await page.evaluate(async appearance => {
+      const { studio } = window.__EZ_ENVIRONMENT__;
+      await studio.resetMeadowPreset();
+      await studio.envChange({ appearance }, { modified: false });
+      studio.cameraPreset('ground');
+    }, appearance);
+    // Resetting tree height also schedules a debounced environment rebuild.
+    const frame = await page.waitForFunction(() => {
+      const { environment, render, renderPipeline } = window.__EZ_ENVIRONMENT__;
+      if (environment.error) throw environment.error;
+      if (!environment.ready || environment.loading) return false;
+      render();
+      return {
+        biome: environment.options.biome,
+        appearance: environment.options.appearance,
+        hash: environment.placement.hash,
+        ready: true,
+        draws: renderPipeline.lastDraw.calls,
+      };
+    });
+    const result = await frame.jsonValue();
+    assert.equal(result.biome, biome);
+    assert.equal(result.appearance, appearance);
+    assert.ok(result.draws > 0);
     if(appearance==='photorealistic')assert.equal(result.hash,biomes.at(-1).hash);
     biomes.push(result);console.log(`PASS portable ${biome} ${appearance}`);
   }
